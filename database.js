@@ -538,6 +538,20 @@ export async function getAllServerSettings() {
         return [];
     }
 }
+/**
+ * Starts the timer for a user without them needing to use a hint
+ */
+export async function startUserPuzzle(internalUserId, internalPuzzleId) {
+    try {
+        await pool.query(`
+            INSERT INTO solve_stat (user_id, puzzle_id, started_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id, puzzle_id) DO NOTHING;
+        `, [internalUserId, internalPuzzleId]);
+    } catch (err) {
+        console.error("error starting user puzzle:", err);
+    }
+}
 
 /**
  * Marks a player's puzzle attempt as finished

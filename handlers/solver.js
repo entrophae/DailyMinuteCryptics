@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { getPuzzleReveals,  getServerChannel,  getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone,savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats} from "../database.js";
+import { getPuzzleReveals,  getServerChannel,  getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone,savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats, startUserPuzzle} from "../database.js";
 import { devLog } from "../dev.js";
 
 export async function loopServers(client){
@@ -117,7 +117,7 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
         .setFooter({ text: `\n🌍 Stats: Total Solves: ${puzzleData.par_details.solveCount} | Average Help: ${puzzleData.par_details.averagePar} | Average Time: ${puzzleData.par_details.medianSolveTimeSeconds}s\n🏡 Total Solves: ${serverData.total_solves} | Average Help: ${serverData.average_help} | Average Time: ${serverData.average_time}s`})
         .setTimestamp();
 
-    const row = new ActionRowBuilder().addComponents(
+    const hintRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('daily-minute-cryptics_indicators')
             .setLabel('Show Indicators')
@@ -134,13 +134,19 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
             .setCustomId('daily-minute-cryptics_reveal-letter')
             .setLabel('Reveal Letter')
             .setStyle(ButtonStyle.Primary),
+    );
+    const actionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('daily-minute-cryptics_start')
+            .setLabel('Start Timer')
+            .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
             .setCustomId('daily-minute-cryptics_submit-answer')
             .setLabel('Submit Answer')
             .setStyle(ButtonStyle.Success)
     );
 
-    return { embeds: [embed], components: [row] };
+    return { embeds: [embed], components: [hintRow, actionRow] };
 }
 
 export async function handleSolverButtons(client, interaction) {
@@ -174,8 +180,16 @@ export async function handleSolverButtons(client, interaction) {
 
         return await interaction.showModal(modal);
     }
-
+    
     const internalUserId = await getOrAddUser(interaction.user.id, serverId);
+
+    if (buttonCommand === 'start') {
+        await startUserPuzzle(internalUserId, puzzleData.id);
+        return interaction.reply({ 
+            content: "⏱️ **Timer started!** Good luck solving the cryptic!", 
+            flags: MessageFlags.Ephemeral 
+        });
+    }
 
     const isEphemeral = interaction.message.flags.has(MessageFlags.Ephemeral);
     if (isEphemeral) {
