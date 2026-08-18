@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChannelType} from 'discord.js';
-import { updateServerChannel } from '../../database';
+import { updateServerChannel } from '../../database.js';
 
 export default {
 	data: new SlashCommandBuilder()

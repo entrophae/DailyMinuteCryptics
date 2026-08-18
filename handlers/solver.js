@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { getPuzzleReveals,  getServerChannel,  getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone,savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats} from "../database";
-import { devLog } from "../dev";
+import { getPuzzleReveals,  getServerChannel,  getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone,savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats} from "../database.js";
+import { devLog } from "../dev.js";
 
 export async function loopServers(client){
     setInterval(async () => {

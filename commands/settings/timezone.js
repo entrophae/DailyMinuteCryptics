@@ -1,5 +1,5 @@
 import { SlashCommandBuilder} from 'discord.js';
-import { updateServerTimezone} from '../../database';
+import { updateServerTimezone} from '../../database.js';
 
 const timezones = Intl.supportedValuesOf('timeZone');
 

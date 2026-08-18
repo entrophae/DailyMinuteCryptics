@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
-import { getServerLeaderboard, getUserStats} from '../../database';
+import { getServerLeaderboard, getUserStats} from '../../database.js';
 
 export default {
 	data: new SlashCommandBuilder()
