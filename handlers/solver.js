@@ -162,6 +162,16 @@ export async function handleSolverButtons(client, interaction) {
         return interaction.reply({ content: "No active puzzle found for this server.", flags: MessageFlags.Ephemeral });
     }
 
+    const internalUserId = await getOrAddUser(interaction.user.id, serverId);
+    const statRes = await getUserPuzzleReveals(internalUserId, puzzleData.id);
+    const isFinished = statRes.rows[0]?.is_finished || false;
+    if (isFinished) {
+        return interaction.reply({ 
+            content: "🏁 You have already completed this puzzle! Check your stats or wait for tomorrow.", 
+            flags: MessageFlags.Ephemeral 
+        });
+    }
+
     if (buttonCommand === 'submit-answer') {
         const modal = new ModalBuilder()
             .setCustomId('daily-minute-cryptics_submit-modal')
@@ -181,7 +191,6 @@ export async function handleSolverButtons(client, interaction) {
         return await interaction.showModal(modal);
     }
     
-    const internalUserId = await getOrAddUser(interaction.user.id, serverId);
 
     if (buttonCommand === 'start') {
         await startUserPuzzle(internalUserId, puzzleData.id);
@@ -313,6 +322,14 @@ export async function handleAnswerSubmit(client, interaction) {
     const correctAnswer = puzzleData.answer.toUpperCase();
     const internalUserId = await getOrAddUser(interaction.user.id, serverId);
 
+    const statRes = await getUserPuzzleReveals(internalUserId, puzzleData.id);
+    if (statRes.rows[0]?.is_finished) {
+        return interaction.reply({ 
+            content: "🏁 You have already completed this puzzle!", 
+            flags: MessageFlags.Ephemeral 
+        });
+    }
+
     if (submittedAnswer === correctAnswer) {
         await finishUserPuzzle(internalUserId, puzzleData.id);
 
@@ -347,6 +364,7 @@ export async function handleAnswerSubmit(client, interaction) {
             .setTitle('🎉 Puzzle Solved!')
             .setColor('#f4f5f6')
             .setDescription(`
+## **<@${interaction.user.id}>s Stats**
 **🔥 Clue Streak:** ${userStats?.streak || 1} clue streak
 **💡 Hints Used:** ${helpUsedCount} hints (World Avg: ${puzzleData.par_details?.averagePar || 0})
 **⛳ Par Count:** ${parText}
@@ -365,8 +383,7 @@ export async function handleAnswerSubmit(client, interaction) {
             .setTimestamp();
 
         return interaction.reply({ 
-            embeds: [resultEmbed], 
-            flags: MessageFlags.Ephemeral 
+            embeds: [resultEmbed]
         });
     } else {
         return interaction.reply({ 

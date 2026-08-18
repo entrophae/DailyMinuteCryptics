@@ -510,7 +510,7 @@ export async function getPuzzleReveals(internalPuzzleId) {
 
 export async function getUserPuzzleReveals(internalUserId, internalPuzzleId) {
     return await pool.query(
-        'SELECT revealed_puzzle_pieces, revealed_hint_types FROM solve_stat WHERE user_id = $1 AND puzzle_id = $2',
+        'SELECT revealed_puzzle_pieces, revealed_hint_types, is_finished FROM solve_stat WHERE user_id = $1 AND puzzle_id = $2',
         [internalUserId, internalPuzzleId]
     );
 }
@@ -564,7 +564,7 @@ export async function finishUserPuzzle(internalUserId, internalPuzzleId) {
             ON CONFLICT (user_id, puzzle_id)
             DO UPDATE SET 
                 is_finished = true,
-                completed_at = NOW()
+                completed_at = COALESCE(solve_stat.completed_at, NOW())
         `, [internalUserId, internalPuzzleId]);
     } catch (err) {
         console.error("error finishing user puzzle:", err);
