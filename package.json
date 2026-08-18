@@ -1,0 +1,21 @@
+{
+    "name": "daily-minute-cryptics",
+    "version": "1.0.0",
+    "description": "Discord bot for daily cryptic puzzles",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js"
+    },
+    "dependencies": {
+        "@sapphire/snowflake": "^3.5.5",
+        "discord.js": "^14.25.1",
+        "dotenv": "^17.2.3",
+        "pg": "^8.11.3",
+        "node-fetch": "^3.3.2"
+    },
+    "devDependencies": {
+        "@discordjs/builders": "^1.13.1",
+        "@discordjs/rest": "^2.6.0"
+    }
+}
