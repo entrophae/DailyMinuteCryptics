@@ -1,56 +1,81 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { getPuzzleReveals,  getServerChannel,  getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone,savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats, startUserPuzzle} from "../database.js";
+import { getPuzzleByUuid, getPuzzleReveals, getServerChannel, getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone, savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats, startUserPuzzle, updateServerMessageId, getServerMessageId, updatePuzzleParDetails, getServerGlobalStats, updateUserAfterSolve } from "../database.js";
 import { devLog } from "../dev.js";
 
 export async function loopServers(client){
     setInterval(async () => {
-        const servers = await getAllServerSettings();
-        
-        for (const server of servers) {
-            // Check if it is midnight and fetch the puzzle
-            const isNewClue = await checkForNewClue(client, server.server_id);
-            
-            // If a new clue was successfully fetched and saved, send the embed
-            if (isNewClue) {
-                await sendClueEmbed(client, server.server_id);
+        try {
+            const servers = await getAllServerSettings();
+
+            for (const server of servers) {
+                try {
+                    const isNewClue = await checkForNewClue(client, server.server_id);
+
+                    if (isNewClue) {
+                        await sendClueEmbed(client, server.server_id);
+                    } else {
+                        await updateLiveStats(client, server.server_id);
+                    }
+                } catch (serverErr) {
+                    console.error(`Loop error for server ${server.server_id}:`, serverErr);
+                }
             }
+        } catch (globalErr) {
+            console.error('Fatal database error in 5-minute loop:', globalErr);
         }
     }, 5 * 60 * 1000);
 }
 
-export async function checkForNewClue(client, serverId) {
+async function getCurrentDate(serverId) {
     const tz = await getServerTimezone(serverId);
 
-    const currentDate = new Intl.DateTimeFormat('en-CA', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    }).format(new Date());
+    const tzDate = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+    const year = tzDate.getFullYear();
+    const month = String(tzDate.getMonth() + 1).padStart(2, '0');
+    const day = String(tzDate.getDate()).padStart(2, '0');
+    const currentDate = `${year}-${month}-${day}`;
+    return currentDate;
+}
 
-    const savedDate = await getServerPuzzleDate(serverId);
-    if (savedDate === currentDate) {
-        return false;
-    }
-
+async function getPuzzleRequestData(serverId) {
+    const tz = await getServerTimezone(serverId);
     const url = new URL(`https://www.minutecryptic.com/api/daily_puzzle/today?tz=${encodeURIComponent(tz)}`);
-    const parUrl = new URL(`https://www.minutecryptic.com/api/daily_puzzle/par/${currentDate}`)
-    
-    try {
-        const [request, requestPar] = await Promise.all([
-            fetch(url),
-            fetch(parUrl)
-        ]);
+    const request = await fetch(url);
+    if (!request.ok) {
+        console.error(`Failed to fetch puzzle: ${request.status} : ${url}`);
+        return null;
+    }
+    else return await request.json();
+}
+async function getParRequestData(serverId) {
+    const currentDate = await getCurrentDate(serverId);
+    const url = new URL(`https://www.minutecryptic.com/api/daily_puzzle/par/${currentDate}`)
+    const request = await fetch(url);
+    if (!request.ok) {
+        console.error(`Failed to fetch puzzle par: ${request.status} : ${url}`);
+        return null;
+    }
+    else return await request.json();
+}
 
-        if (!request.ok || !requestPar.ok) {
-            console.error( `Failed to fetch puzzle: ${request.status}, par: ${requestPar.status}` );
-            return false;
+export async function checkForNewClue(client, serverId) {
+    const currentDate = await getCurrentDate(serverId);
+    const savedDate = await getServerPuzzleDate(serverId);
+
+    try {
+        const puzzleData = await getPuzzleRequestData(serverId);
+        if (!puzzleData) return false;
+
+        const parData = await getParRequestData(serverId);
+        if (parData) {
+            if (JSON.stringify(puzzleData.parDetails) !== JSON.stringify(parData.parDetails)) {
+                await updatePuzzleParDetails(puzzleData.puzzle_uuid, parData.parDetails);
+            }
         }
 
-        const puzzleData = await request.json();
-        const parData = await requestPar.json();
-
-        puzzleData.parDetails = parData.parDetails;
+        if (savedDate === currentDate) {
+    	    return false;
+    	}
 
         await savePuzzle(puzzleData);
         await updateServerPuzzle(serverId, puzzleData.puzzleId, puzzleData.date);
@@ -70,7 +95,8 @@ export async function sendClueEmbed(client, serverId) {
         const activeChannel = guild.channels.cache.get(activeChannelId);
         if (activeChannel) {
             const message = await createMessage(puzzleData, serverId);
-            await activeChannel.send(message);
+            const sentMessage = await activeChannel.send(message);
+            await updateServerMessageId(serverId, sentMessage.id);
         }
     }
 }
@@ -78,11 +104,12 @@ export async function sendClueEmbed(client, serverId) {
 async function createMessage(puzzleData, serverId, userRevealedPieces = [], userRevealedHints = [], hintMessage = null){
     const fullClue = puzzleData.clue.join(" ");
     const answerLength = puzzleData.puzzle_pieces.length;
+    const uuid = puzzleData.puzzle_uuid;
 
     const formattedAnsiClue = formatClueAnsi(fullClue, puzzleData.hints, userRevealedHints);
 
     const answerBlanks = puzzleData.puzzle_pieces.map((piece, index) => {
-        if (userRevealedPieces.includes(index)) return `**\\\`${piece}\\\`**`;
+        if (userRevealedPieces.includes(index)) return "**\`${piece}\`**";
         return "\`\_\`";
     }).join("  ");
 
@@ -99,6 +126,9 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
         description += `\n\n**Hint:**\n> ${hintMessage}`;
     }
 
+    const footerText = await generateStatsFooterText(puzzleData, serverId);
+    const coursePrefix = "https://www.minutecryptic.com/course";
+
     const embed = new EmbedBuilder()
         .setColor("#f4f5f6")
         .setAuthor({ 
@@ -110,38 +140,38 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
             { name: 'Color Legend:', value: `\`\`\`ansi\nDefinition: [46m [0m \nIndicators: [45m [0m \nFodder: [43m [0m\n\`\`\``, inline: true },
             { name: '\u200B', value: '\u200B', inline: true },
             { name: '\u200B', value: '\u200B', inline: true },
-            { name: 'Wordplays:', value: `-# Substit. Synonyms\n-# Substit. Symbols\n-# Containers\n-# Deletions\n-# Homophones`, inline: true },
-            { name: 'Letterplays:', value: `\n-# Anagrams\n-# Selectors\n-# Hiddens\n-# Reversals`, inline: true },
-            { name: 'Weirdplays:', value: `\n-# Translations\n-# Homoglyphs\n-# Double Definitions\n-# Rebuses\n-# &lits`, inline: true },
+            { name: 'Letterplay Course:', value: `\n-# [Basics](${coursePrefix}/letterplay/basics/1)\n-# [Anagrams](${coursePrefix}/letterplay/anagrams/1)\n-# [Selectors](${coursePrefix}/letterplay/selectors/1)\n-# [Hiddens](${coursePrefix}/letterplay/hiddens/1)\n-# [Reversals](${coursePrefix}/letterplay/reversals/1)`, inline: true },
+            { name: 'Wordplay Course:', value: `\n-# [Synonyms](${coursePrefix}/wordplay/synonyms/1)\n-# [Symbols](${coursePrefix}/wordplay/symbols/1)\n-# [Containers](${coursePrefix}/wordplay/containers/1)\n-# [Deletions](${coursePrefix}/wordplay/deletions/1)\n-# [Homophones](${coursePrefix}/wordplay/homophones/1)`, inline: true },
+            { name: 'Weirdplay Course:', value: `\n-# [Translations](${coursePrefix}/weirdplay/translation/1)\n-# [Homoglyphs](${coursePrefix}/weirdplay/homoglyphs/1)\n-# [Double Definitions](${coursePrefix}/weirdplay/double-definitions/1)\n-# [Rebuses](${coursePrefix}/weirdplay/rebuses/1)\n-# [&lits](${coursePrefix}/weirdplay/and-lits/1)`, inline: true },
         )
-        .setFooter({ text: `\n🌍 Stats: Total Solves: ${puzzleData.par_details.solveCount} | Average Help: ${puzzleData.par_details.averagePar} | Average Time: ${puzzleData.par_details.medianSolveTimeSeconds}s\n🏡 Total Solves: ${serverData.total_solves} | Average Help: ${serverData.average_help} | Average Time: ${serverData.average_time}s`})
+        .setFooter({ text: footerText})
         .setTimestamp();
 
     const hintRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('daily-minute-cryptics_indicators')
+            .setCustomId(`daily-minute-cryptics_indicators_${uuid}`)
             .setLabel('Show Indicators')
             .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-            .setCustomId('daily-minute-cryptics_fodder')
+            .setCustomId(`daily-minute-cryptics_fodder_${uuid}`)
             .setLabel('Show Fodders')
             .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-            .setCustomId('daily-minute-cryptics_definition')
+            .setCustomId(`daily-minute-cryptics_definition_${uuid}`)
             .setLabel('Show Definition(s)')
             .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-            .setCustomId('daily-minute-cryptics_reveal-letter')
+            .setCustomId(`daily-minute-cryptics_reveal-letter_${uuid}`)
             .setLabel('Reveal Letter')
             .setStyle(ButtonStyle.Primary),
     );
     const actionRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('daily-minute-cryptics_start')
+            .setCustomId(`daily-minute-cryptics_start_${uuid}`)
             .setLabel('Start Timer')
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
-            .setCustomId('daily-minute-cryptics_submit-answer')
+            .setCustomId(`daily-minute-cryptics_submit-answer_${uuid}`)
             .setLabel('Submit Answer')
             .setStyle(ButtonStyle.Success)
     );
@@ -149,55 +179,76 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
     return { embeds: [embed], components: [hintRow, actionRow] };
 }
 
+async function updateLiveStats(client, serverId) {
+    try {
+        const channelId = await getServerChannel(serverId);
+        const messageId = await getServerMessageId(serverId);
+        if (!channelId || !messageId) return;
+
+        const guild = client.guilds.cache.get(serverId);
+        const channel = guild?.channels.cache.get(channelId);
+        if (!channel) return;
+
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+        if (!message) return;
+
+        const puzzleData = await getServerPuzzle(serverId);
+        if (!puzzleData) return;
+
+        const newFooterText = await generateStatsFooterText(puzzleData, serverId, true);
+        const oldEmbed = message.embeds[0];
+
+        if (oldEmbed) {
+            const updatedEmbed = EmbedBuilder.from(oldEmbed).setFooter({ text: newFooterText });
+            await message.edit({ embeds: [updatedEmbed] });
+        }
+    } catch (err) {
+        console.error(`Failed to background update live stats for server ${serverId}:`, err);
+    }
+}
+
+async function generateStatsFooterText(puzzleData, serverId) {
+    const serverStats = await getServerPuzzleStat(puzzleData.puzzle_uuid, serverId);
+
+    let worldSolves = puzzleData.par_details?.solveCount || "N/A";
+    let worldAvgHelp = puzzleData.par_details?.averagePar || "N/A";
+    let worldAvgTime = puzzleData.par_details?.medianSolveTimeSeconds || "N/A";
+
+    try {
+        const parData = await getParRequestData(serverId);
+        if (parData) {
+            worldSolves = parData.parDetails?.solveCount || worldSolves;
+            worldAvgHelp = parData.parDetails?.averagePar || worldAvgHelp;
+            worldAvgTime = parData.parDetails?.medianSolveTimeSeconds || worldAvgTime;
+        } else {console.error('Failed to fetch fresh world stats:', error);}
+    } catch (error) {
+        console.error('Failed to fetch fresh world stats:', error);
+    }
+    return `\n🌍 Stats: Total Solves: ${worldSolves} | Average Help: ${worldAvgHelp} | Average Time: ${worldAvgTime}s\n🏡 Total Solves: ${serverStats.total_solves} | Average Help: ${serverStats.average_help} | Average Time: ${serverStats.average_time}s\n`;
+}
+
 export async function handleSolverButtons(client, interaction) {
     const serverId = interaction.guild.id;
     const parts = interaction.customId.split("_");
     const buttonOrigin = parts[0];
     const buttonCommand = parts[1];
-
-    if (buttonOrigin !== "daily-minute-cryptics") return;
-
-    const puzzleData = await getServerPuzzle(serverId);
-    if (!puzzleData) {
-        return interaction.reply({ content: "No active puzzle found for this server.", flags: MessageFlags.Ephemeral });
-    }
-
-    const internalUserId = await getOrAddUser(interaction.user.id, serverId);
-    const statRes = await getUserPuzzleReveals(internalUserId, puzzleData.id);
-    const isFinished = statRes.rows[0]?.is_finished || false;
-    if (isFinished) {
-        return interaction.reply({ 
-            content: "🏁 You have already completed this puzzle! Check your stats or wait for tomorrow.", 
-            flags: MessageFlags.Ephemeral 
-        });
-    }
+    const puzzleUuid = parts[2];
 
     if (buttonCommand === 'submit-answer') {
         const modal = new ModalBuilder()
-            .setCustomId('daily-minute-cryptics_submit-modal')
+            .setCustomId(`daily-minute-cryptics_submit-modal_${puzzleUuid}`)
             .setTitle('Submit Your Answer');
 
         const answerInput = new TextInputBuilder()
             .setCustomId('answer_input')
             .setLabel("What is the answer?")
             .setStyle(TextInputStyle.Short)
-            .setMaxLength(puzzleData.answer.length)
-            .setMinLength(puzzleData.answer.length)
             .setRequired(true);
 
         const actionRow = new ActionRowBuilder().addComponents(answerInput);
         modal.addComponents(actionRow);
 
         return await interaction.showModal(modal);
-    }
-    
-
-    if (buttonCommand === 'start') {
-        await startUserPuzzle(internalUserId, puzzleData.id);
-        return interaction.reply({ 
-            content: "⏱️ **Timer started!** Good luck solving the cryptic!", 
-            flags: MessageFlags.Ephemeral 
-        });
     }
 
     const isEphemeral = interaction.message.flags.has(MessageFlags.Ephemeral);
@@ -207,22 +258,44 @@ export async function handleSolverButtons(client, interaction) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     }
 
+    const puzzleData = await getPuzzleByUuid(puzzleUuid);
+    if (!puzzleData) {
+        return interaction.editReply({ content: "Error: Could not locate this puzzle in the database."});
+    }
+
+    const internalUserId = await getOrAddUser(interaction.user.id, serverId);
+    const statRes = await getUserPuzzleReveals(internalUserId, puzzleData.id);
+    const isFinished = statRes.rows[0]?.is_finished || false;
+
+    if (isFinished) {
+        return interaction.editReply({ 
+            content: "🏁 You have already completed this puzzle! Check your stats or wait for tomorrow."
+        });
+    }
+
+    if (buttonCommand === 'start') {
+        await startUserPuzzle(internalUserId, puzzleData.id);
+        return interaction.editReply({
+            content: "⏱️ **Timer started!** Good luck solving the cryptic!"
+        });
+    }
+
     if (buttonCommand === 'reveal-letter') {
         const revealData = await revealNextLetter(client, internalUserId, puzzleData.id);
-        
+
         if (!revealData) return interaction.editReply("An error occurred while revealing the letter.");
         if (revealData.error) return interaction.editReply("You have already revealed all available letters!");
-        
+
         const statRes = await getUserPuzzleReveals(internalUserId, puzzleData.id);
         const userRevealedPieces = statRes.rows[0]?.revealed_puzzle_pieces || [];
         const userRevealedHints = statRes.rows[0]?.revealed_hint_types || [];
-        
+
         const messagePayload = await createMessage(puzzleData, serverId, userRevealedPieces, userRevealedHints, null);
         return interaction.editReply(messagePayload);
     }
-    else if (['indicators', 'fodder', 'definition'].includes(buttonCommand)) {
+    if (['indicators', 'fodder', 'definition'].includes(buttonCommand)) {
         const hint = puzzleData.hints?.find(h => h.type === buttonCommand);
-        
+
         if (!hint) {
             return interaction.editReply(`No **${buttonCommand}** hints available for this puzzle.`);
         }
@@ -234,7 +307,7 @@ export async function handleSolverButtons(client, interaction) {
         const userRevealedHints = statRes.rows[0]?.revealed_hint_types || [];
 
         const hintMessage = `**${buttonCommand.toUpperCase()}:** ${hint.text}`;
-        
+
         const messagePayload = await createMessage(puzzleData, serverId, userRevealedPieces, userRevealedHints, hintMessage);
         return interaction.editReply(messagePayload);
     }
@@ -289,7 +362,6 @@ function formatClueAnsi(fullClue, hints, revealedHintTypes = []) {
         if (revealedHintTypes.includes(hint.type) && hint.highlighting) {
             const color = ANSI_COLORS[hint.type] || "";
             for (const [start, end] of hint.highlighting) {
-                // isReset flag ensures the reset tag is always inserted AFTER the color tag if indices match
                 inserts.push({ index: start, text: color, isReset: 0 });
                 inserts.push({ index: end, text: ANSI_COLORS.reset, isReset: 1 });
             }
@@ -311,84 +383,122 @@ function formatClueAnsi(fullClue, hints, revealedHintTypes = []) {
 }
 
 export async function handleAnswerSubmit(client, interaction) {
-    const serverId = interaction.guild.id;
-    const puzzleData = await getServerPuzzle(serverId);
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    if (!puzzleData) {
-        return interaction.reply({ content: "No active puzzle found for this server.", flags: MessageFlags.Ephemeral });
+    try {
+        const serverId = interaction.guild.id;
+        const parts = interaction.customId.split("_");
+        const puzzleUuid = parts[2];
+
+        const puzzleData = await getPuzzleByUuid(puzzleUuid);
+
+        if (!puzzleData) {
+            return interaction.editReply({ content: "Error: Could not locate this puzzle in the database.", flags: MessageFlags.Ephemeral });
+        }
+
+        const submittedAnswer = interaction.fields.getTextInputValue('answer_input').trim().toUpperCase();
+        const correctAnswer = puzzleData.answer.toUpperCase();
+        const internalUserId = await getOrAddUser(interaction.user.id, serverId);
+
+        const statRes = await getUserPuzzleReveals(internalUserId, puzzleData.id);
+        if (statRes.rows[0]?.is_finished) {
+            return interaction.editReply({ 
+                content: "🏁 You have already completed this puzzle!" 
+            });
+        }
+
+        if (submittedAnswer === correctAnswer) {
+            await finishUserPuzzle(internalUserId, puzzleData.id);
+
+            const userSolve = await getUserSolve(internalUserId, puzzleData.id);
+            const helpUsedCount = userSolve?.help_used ? userSolve.help_used.length : 0;
+
+            const serverTz = await getServerTimezone(serverId);
+            const now = new Date(new Date().toLocaleString("en-US", { timeZone: serverTz }));
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+            await updateUserAfterSolve(internalUserId, todayStr, helpUsedCount);
+
+            const resultEmbed = await createSolveStat(interaction, serverId, internalUserId, puzzleData);
+
+            await interaction.channel.send({ embeds: [resultEmbed] });
+
+            return interaction.editReply({
+                content: "✅ **Correct!** Your stats have been posted in the channel."
+            });
+
+        } else {
+            return interaction.editReply({ 
+                content: `❌ **Incorrect!** \`${submittedAnswer}\` is not the right answer. Keep trying!`, 
+                flags: MessageFlags.Ephemeral 
+            });
+        }
+    } catch (err) {
+        console.error("Crash inside handleAnswerSubmit:", err);
+        return interaction.editReply({ content: "An internal error occurred while checking your answer." });
     }
+}
 
-    const submittedAnswer = interaction.fields.getTextInputValue('answer_input').trim().toUpperCase();
-    const correctAnswer = puzzleData.answer.toUpperCase();
-    const internalUserId = await getOrAddUser(interaction.user.id, serverId);
+const formatTime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return "0s";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+};
 
-    const statRes = await getUserPuzzleReveals(internalUserId, puzzleData.id);
-    if (statRes.rows[0]?.is_finished) {
-        return interaction.reply({ 
-            content: "🏁 You have already completed this puzzle!", 
-            flags: MessageFlags.Ephemeral 
-        });
-    }
+async function createSolveStat(interaction, serverId, internalUserId, puzzleData) {
+    const userSolve = await getUserSolve(internalUserId, puzzleData.id);
+    const userStats = await getUserStats(interaction.user.id);
+    const serverStats = await getServerPuzzleStat(puzzleData.puzzle_uuid, serverId);
+    const serverTz = await getServerTimezone(serverId);
 
-    if (submittedAnswer === correctAnswer) {
-        await finishUserPuzzle(internalUserId, puzzleData.id);
+    const helpUsedCount = userSolve?.help_used ? userSolve.help_used.length : 0;
+    const parDiff = helpUsedCount - puzzleData.par;
+    let parText = "Equal to world par";
+    if (parDiff > 0) parText = `${parDiff} above world par`;
+    if (parDiff < 0) parText = `${Math.abs(parDiff)} below world par`;
 
-        const userSolve = await getUserSolve(internalUserId, puzzleData.id);
-        const userStats = await getUserStats(interaction.user.id);
-        const serverStats = await getServerPuzzleStat(puzzleData.puzzle_uuid, serverId);
-        const serverTz = await getServerTimezone(serverId);
+    const now = new Date();
+    const localStr = now.toLocaleString("en-US", { timeZone: serverTz });
+    const localMidnight = new Date(localStr);
+    localMidnight.setDate(localMidnight.getDate() + 1);
+    localMidnight.setHours(0, 0, 0, 0);
+    const epochDiff = localMidnight.getTime() - new Date(localStr).getTime();
+    const nextMidnightEpoch = Math.floor((now.getTime() + epochDiff) / 1000);
 
-        const formatTime = (seconds) => {
-            if (!seconds || isNaN(seconds)) return "0s";
-            const m = Math.floor(seconds / 60);
-            const s = Math.floor(seconds % 60);
-            return m > 0 ? `${m}m ${s}s` : `${s}s`;
-        };
+    const d = new Date(puzzleData.date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const date = `${day}.${month}.${year}`;
 
-        const helpUsedCount = userSolve?.help_used ? userSolve.help_used.length : 0;
-        const parDiff = helpUsedCount - puzzleData.par;
-        let parText = "Equal to world par";
-        if (parDiff > 0) parText = `${parDiff} above world par 📈`;
-        if (parDiff < 0) parText = `${Math.abs(parDiff)} below world par 📉`;
-
-        const now = new Date();
-        const localStr = now.toLocaleString("en-US", { timeZone: serverTz });
-        const localMidnight = new Date(localStr);
-        localMidnight.setDate(localMidnight.getDate() + 1);
-        localMidnight.setHours(0, 0, 0, 0);
-        const epochDiff = localMidnight.getTime() - new Date(localStr).getTime();
-        const nextMidnightEpoch = Math.floor((now.getTime() + epochDiff) / 1000);
-
-
-        const resultEmbed = new EmbedBuilder()
-            .setTitle('🎉 Puzzle Solved!')
-            .setColor('#f4f5f6')
-            .setDescription(`
-## **<@${interaction.user.id}>s Stats**
-**🔥 Clue Streak:** ${userStats?.streak || 1} clue streak
+    const resultEmbed = new EmbedBuilder()
+        .setTitle(`🎉 Puzzle Solved for ${date}!`)
+        .setColor('#add3ff')
+        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setDescription(`
+## **<@${interaction.user.id}>**
+**🔥 Clue Streak:** ${userStats?.streak || 1} (Max: ${userStats?.max_streak || 1})
 **💡 Hints Used:** ${helpUsedCount} hints (World Avg: ${puzzleData.par_details?.averagePar || 0})
 **⛳ Par Count:** ${parText}
+
+**📈 Lifetime:** ${userStats?.total_solves || 1} solve(s) (${userStats?.perfect_solves || 0} perfect)
 
 **⏱️ Timing:**
 > **Your Time:** ${formatTime(userSolve?.time_taken_seconds)}
 > **Avg Server Time:** ${formatTime(serverStats?.average_time)}
 > **Avg World Time:** ${formatTime(puzzleData.par_details?.medianSolveTimeSeconds)}
 
-**👥 Solvers:** ${serverStats?.total_solves || 1} in server • ${puzzleData.par_details?.solveCount || 1} in world
 **⏳ Next Clue:** <t:${nextMidnightEpoch}:R>
 
 [**▶️ Watch Explanation Video**](${puzzleData.explainer_video})
-            `)
-            .setFooter({ text: 'Daily Minute Cryptics' })
-            .setTimestamp();
+        `)
+        .setFooter({ text: "DailyMinuteCryptics" })
+        .setTimestamp();
 
-        return interaction.reply({ 
-            embeds: [resultEmbed]
-        });
-    } else {
-        return interaction.reply({ 
-            content: `❌ **Incorrect!** \`${submittedAnswer}\` is not the right answer. Keep trying!`, 
-            flags: MessageFlags.Ephemeral 
-        });
-    }
+    return resultEmbed;
 }
+

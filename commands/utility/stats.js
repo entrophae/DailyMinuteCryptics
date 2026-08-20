@@ -1,8 +1,8 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
-import { getServerLeaderboard, getUserStats} from '../../database.js';
+import { getServerLeaderboard, getUserStats, getServerGlobalStats } from '../../database.js';
 
 export default {
-	data: new SlashCommandBuilder()
+    data: new SlashCommandBuilder()
         .setName('stats')
         .setDescription('Look at stats')
         .addSubcommand((subcommand) =>
@@ -20,81 +20,56 @@ export default {
             subcommand.setName('server')
                 .setDescription('Stats about server')
         ),
-	async execute(interaction) {
-        const subcommand = interaction.options.getSubcommand();
+    async execute(interaction) {
         await interaction.deferReply();
 
-        if (subcommand === 'self' || subcommand === 'user') {
-            const targetUser = subcommand === 'self' 
-                ? interaction.user 
-                : interaction.options.getUser('target');
-
-            const stats = await getUserStats(targetUser.id);
-
-            if (!stats) {
-                return interaction.editReply(`No puzzle stats found for ${targetUser.username} yet.`);
-            }
-
-            return interaction.editReply(
-                `**Stats for ${targetUser.username}:**\n` +
-                `- Total Solves: ${stats.total_solves}\n` +
-                `- Perfect Solves (No Help): ${stats.perfect_solves}\n` +
-                `- Current Streak: ${stats.streak}\n` +
-                `- Max Streak: ${stats.max_streak}`
-            );
-        }
-
-        if (subcommand === 'server') {
-            const leaderboard = await getServerLeaderboard(interaction.guild.id);
-
-            if (leaderboard.length === 0) {
-                return interaction.editReply("Nobody in this server has solved a puzzle yet!");
-            }
-
-            let message = `**Leaderboard for ${interaction.guild.name}:**\n`;
-            leaderboard.forEach((entry, index) => {
-                message += `${index + 1}. <@${entry.user_id}> - ${entry.total_solves} solves (Streak: ${entry.streak})\n`;
-            });
-
-            return interaction.editReply(message);
-        }
+        await createEmbed(interaction);
     },
 };
 
-async function createEmbed(subcommand) {
+async function createEmbed(interaction) {
+    const subcommand = interaction.options.getSubcommand();
     if (subcommand === 'self' || subcommand === 'user') {
         const targetUser = subcommand === 'self' 
-            ? interaction.user 
+            ? interaction.user
             : interaction.options.getUser('target');
 
-        const stats = await getUserStats(targetUser.id);
-        if (!stats) {
+        const userStats = await getUserStats(targetUser.id);
+        const serverStats = await getServerGlobalStats(interaction.guild.id);
+
+        if (!userStats) {
             return interaction.editReply(`No stats found for ${targetUser.username} yet.`);
         }
-        const hasSolves = stats.total_solves > 0;
-        const lastSolve = stats.last_solve_date 
-            ? `<t:${Math.floor(new Date(stats.last_solve_date).getTime() / 1000)}:D>` 
+        const avgHelpUsedCount = userStats.avg_help || 0;
+        const avgParDiff = userStats.avg_par_diff || 0;
+        const lastSolve = userStats.last_solve_date 
+            ? `<t:${Math.floor(new Date(userStats.last_solve_date).getTime() / 1000)}:D>` 
             : 'Never';
-        
+        let parText = "Equal to server average";
+        if (avgParDiff > 0) parText = `${avgParDiff} above server average`;
+        if (avgParDiff < 0) parText = `${Math.abs(avgParDiff)} below server average`;
+
         const embed = new EmbedBuilder()
-            .setTitle(`📊 Cryptic Stats: ${targetUser.username}`)
-            .setColor('#2b2d31')
+            .setTitle(`Server Stats: ${targetUser.username}`)
+            .setColor('#f5d1fd')
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-            .addFields(
-                { name: 'Total Solves', value: `${stats.total_solves}`, inline: true },
-                { name: 'Perfect Solves', value: `${stats.perfect_solves}`, inline: true },
-                { name: 'Last Solve', value: lastSolve, inline: true },
-                
-                { name: 'Least Help Used', value: hasSolves ? `${stats.least_help ?? 0} hints` : 'N/A', inline: true },
-                { name: 'Max Help Used', value: hasSolves ? `${stats.max_help ?? 0} hints` : 'N/A', inline: true },
-                { name: '\u200B', value: '\u200B', inline: true },
-                
-                { name: 'Current Streak', value: `🔥 ${stats.streak}`, inline: true },
-                { name: 'Max Streak', value: `⭐ ${stats.max_streak}`, inline: true },
-                { name: '\u200B', value: '\u200B', inline: true }
-            )
+            .setDescription(`
+## **<@${targetUser.id}>**
+**✨ Total Solves:** ${userStats.total_solves || 0} (${userStats.perfect_solves || 0} perfect)
+**✨ Last Solve:** ${lastSolve}
+
+**🔥 Current Streak:** ${userStats.streak || 1}
+**🏆 Max Streak:** ${userStats.max_streak || 1}
+
+**💡 Max Hints Used:** ${userStats.max_help ?? 0} hints
+**💡 Min Hints Used:** ${userStats.least_help ?? 0} hints
+**💡 Avg Hints Used:** ${avgHelpUsedCount} hints (Server Avg: ${serverStats.server_avg_help})
+**⛳ Avg Par Diff:** ${parText}
+            `)
             .setFooter({ text: 'Daily Minute Cryptics' })
             .setTimestamp();
+
+        interaction.editReply({ embeds: [embed] });
     }
     else if (subcommand === 'server') {
         const leaderboard = await getServerLeaderboard(interaction.guild.id);
@@ -176,8 +151,36 @@ async function createEmbed(subcommand) {
                 await interaction.editReply({ components: [] }).catch(() => {});
             });
         }
-        return;
     }
+}
 
-    return interaction.editReply({ embeds: [embed] });
+
+async function createUserStat(interaction, serverId) {
+    const userStats = await getUserStats(interaction.user.id);
+    const serverStats = await getServerGlobalStats(serverId);
+
+    const avgHelpUsedCount = userStats?.avg_help || 0;
+    const avgParDiff = userStats?.avg_par_diff || 0;
+
+    let parText = "Equal to server average";
+    if (avgParDiff > 0) parText = `${avgParDiff} above server average`;
+    if (avgParDiff < 0) parText = `${Math.abs(avgParDiff)} below server average`;
+
+    const resultEmbed = new EmbedBuilder()
+        .setTitle(`📊 Lifetime Stats`)
+        .setColor('#fff2b1')
+        .setDescription(`
+## **<@${interaction.user.id}>**
+**✨ Total Solves:** ${userStats?.total_solves || 0} (${userStats?.perfect_solves || 0} perfect)
+
+**🔥 Current Streak:** ${userStats?.streak || 1}
+**🏆 Max Streak:** ${userStats?.max_streak || 1}
+
+**💡 Avg Hints Used:** ${avgHelpUsedCount} hints (Server Avg: ${serverStats.server_avg_help})
+**⛳ Avg Par Diff:** ${parText}
+        `)
+        .setFooter({ text: "DailyMinuteCryptics" })
+        .setTimestamp();
+
+    return resultEmbed;
 }

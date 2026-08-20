@@ -8,8 +8,11 @@ const pool = new Pool({
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
 });
-
+pool.on('error', (err, client) => {
+    console.error('Unexpected error on idle database client:', err.message);
+});
 async function initiateDatabase() {
+
     const initClient = new Client({
         user: process.env.DB_USER,
         host: process.env.DB_HOST,
@@ -17,9 +20,9 @@ async function initiateDatabase() {
         password: process.env.DB_PASSWORD,
         port: process.env.DB_PORT,
     });
-
     await initClient.connect();
-    
+
+
     const res = await initClient.query(
         `SELECT datname FROM pg_catalog.pg_database WHERE datname = $1`, 
         [process.env.DB_NAME]
@@ -29,13 +32,13 @@ async function initiateDatabase() {
         console.log(`Database "${process.env.DB_NAME}" does not exist. Creating it now...`);
         await initClient.query(`CREATE DATABASE "${process.env.DB_NAME}"`);
     }
-    
+
     await initClient.end();
 }
 
 export async function createTables() {
     try {
-        await initiateDatabase();
+        // await initiateDatabase();
 
         await pool.query(`
             CREATE TABLE IF NOT EXISTS "user" (
@@ -50,9 +53,7 @@ export async function createTables() {
                 min_help_used INT NOT NULL DEFAULT 0,
                 max_help_used INT NOT NULL DEFAULT 0
             );
-        `);
-        
-        await pool.query(`
+
             CREATE TABLE IF NOT EXISTS puzzle (
                 id SERIAL PRIMARY KEY,
                 puzzle_uuid UUID UNIQUE NOT NULL,
@@ -67,9 +68,7 @@ export async function createTables() {
                 par_details JSONB,
                 setter_name TEXT
             );
-        `);
 
-        await pool.query(`
             CREATE TABLE IF NOT EXISTS solve_stat (
                 id SERIAL PRIMARY KEY,
                 puzzle_id INT REFERENCES puzzle(id) ON DELETE CASCADE,
@@ -82,28 +81,23 @@ export async function createTables() {
                 completed_at TIMESTAMP WITH TIME ZONE,
                 UNIQUE(user_id, puzzle_id)
             );
-        `);
-        
-        await pool.query(`
+
             CREATE TABLE IF NOT EXISTS server_user (
                 server_id TEXT NOT NULL,
                 user_id INT REFERENCES "user"(id) ON DELETE CASCADE,
                 PRIMARY KEY (server_id, user_id)
             );
-        `);
 
-        await pool.query(`
             CREATE TABLE IF NOT EXISTS server_setting (
                 server_id TEXT PRIMARY KEY,
                 timezone TEXT NOT NULL DEFAULT 'Europe/Berlin',
                 channel_id TEXT,
                 current_puzzle_uuid TEXT,
                 current_puzzle_date DATE,
+                current_puzzle_message_id TEXT,
                 puzzle_stat JSONB[]
             );
         `);
-
-        // puzzle_stat should have an array of json obnjects havihng {"puzzle_uuid": <id>, "total_solves": <float>, "avg_help": <float>, "average_time": <float>}
 
         console.log("Tables created successfully!");
     } catch (err) {
@@ -197,6 +191,54 @@ export async function savePuzzle(puzzleData) {
     }
 }
 
+export async function updatePuzzleParDetails(puzzleUuid, parDetails) {
+    try {
+        await pool.query(`
+            UPDATE puzzle
+            SET par_details = $1
+            WHERE puzzle_uuid = $2
+        `, [ JSON.stringify(parDetails), puzzleUuid ]);
+    } catch (err) {
+        console.error("error updating puzzleParDetails");
+    }
+}
+
+export async function getPuzzleByUuid(uuid) {
+    try {
+        const { rows } = await pool.query(`
+            SELECT * FROM puzzle WHERE puzzle_uuid = $1
+        `, [uuid]);
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.error('error fetching puzzle by uuid:', error);
+        return null;
+    }
+}
+
+export async function updateServerMessageId(serverId, messageId) {
+    try {
+        await pool.query(`
+            UPDATE server_setting 
+            SET current_puzzle_message_id = $2 
+            WHERE server_id = $1
+        `, [serverId, messageId]);
+    } catch (err) {
+        console.error("error updating server message id:", err);
+    }
+}
+
+export async function getServerMessageId(serverId) {
+    try {
+        const { rows } = await pool.query(`
+            SELECT current_puzzle_message_id FROM server_setting WHERE server_id = $1
+        `, [serverId]);
+        return rows.length > 0 ? rows[0].current_puzzle_message_id : null;
+    } catch (error) {
+        console.error('error fetching server message id:', error);
+        return null;
+    }
+}
+
 /**
  * saves or updates a users solve attempt
  */
@@ -237,18 +279,32 @@ export async function saveSolveStat(internalUserId, internalPuzzleId, statData) 
     }
 }
 
-/**
- * updates the user streaks
- */
-export async function updateUserStreak(internalUserId, currentStreak, maxStreak) {
+export async function updateUserAfterSolve(internalUserId, currentDateStr, helpUsedCount) {
     try {
         await pool.query(`
             UPDATE "user"
-            SET streak = $2, max_streak = GREATEST(max_streak, $3)
+            SET 
+                streak = CASE 
+                    WHEN last_solve = $2::DATE THEN streak 
+                    WHEN last_solve = $2::DATE - INTERVAL '1 day' THEN streak + 1 
+                    ELSE 1 
+                END,
+                max_streak = GREATEST(max_streak, 
+                    CASE 
+                        WHEN last_solve = $2::DATE THEN streak 
+                        WHEN last_solve = $2::DATE - INTERVAL '1 day' THEN streak + 1 
+                        ELSE 1 
+                    END
+                ),
+                last_solve = $2::DATE,
+                solves = solves + 1,
+                perfect_solves = perfect_solves + CASE WHEN $3::INT = 0 THEN 1 ELSE 0 END,
+                min_help_used = CASE WHEN solves = 0 THEN $3::INT ELSE LEAST(min_help_used, $3::INT) END,
+                max_help_used = CASE WHEN solves = 0 THEN $3::INT ELSE GREATEST(max_help_used, $3::INT) END
             WHERE id = $1;
-        `, [internalUserId, currentStreak, maxStreak]);
+        `, [internalUserId, currentDateStr, helpUsedCount]);
     } catch (err) {
-        console.error("error updating streaks:", err);
+        console.error("error updating user stats:", err);
     }
 }
 
@@ -460,22 +516,49 @@ export async function deleteServerSettings(serverId) {
 export async function getUserStats(discordUserId) {
     try {
         const { rows } = await pool.query(`
-            SELECT u.streak, u.max_streak,
-                COUNT(s.id)::int as total_solves,
-                COUNT(CASE WHEN s.help_used = '{}' OR s.help_used IS NULL THEN 1 END)::int as perfect_solves,
-                MAX(s.completed_at) as last_solve_date,
-                MIN(cardinality(s.help_used)) as least_help,
-                MAX(cardinality(s.help_used)) as max_help
+            SELECT
+                u.streak,
+                u.max_streak,
+                u.solves as total_solves,
+                u.perfect_solves,
+                u.last_solve as last_solve_date,
+                u.min_help_used as least_help,
+                u.max_help_used as max_help,
+                COALESCE(AVG(cardinality(s.help_used)), 0)::numeric(10,1) as avg_help,
+                COALESCE(AVG(EXTRACT(EPOCH FROM (s.completed_at - s.started_at))), 0)::numeric(10,1) as avg_time,
+                COALESCE(AVG(cardinality(s.help_used) - p.par), 0)::numeric(10,1) as avg_par_diff
             FROM "user" u
             LEFT JOIN solve_stat s ON u.id = s.user_id AND s.is_finished = true
+            LEFT JOIN puzzle p ON s.puzzle_id = p.id
             WHERE u.user_id = $1
             GROUP BY u.id;
         `, [discordUserId]);
-        
+
         return rows[0] || null;
     } catch (err) {
         console.error("error fetching user stats:", err);
         return null;
+    }
+}
+
+export async function getServerGlobalStats(serverId) {
+    try {
+        const { rows } = await pool.query(`
+            SELECT
+                COALESCE(AVG(cardinality(s.help_used)), 0)::numeric(10,1) as server_avg_help,
+                COALESCE(AVG(EXTRACT(EPOCH FROM (s.completed_at - s.started_at))), 0)::numeric(10,1) as server_avg_time,
+                COALESCE(AVG(cardinality(s.help_used) - p.par), 0)::numeric(10,1) as server_avg_par_diff
+            FROM solve_stat s
+            JOIN puzzle p ON s.puzzle_id = p.id
+            JOIN "user" u ON s.user_id = u.id
+            JOIN server_user su ON u.id = su.user_id
+            WHERE su.server_id = $1 AND s.is_finished = true
+        `, [serverId]);
+
+        return rows[0] || { server_avg_help: 0, server_avg_time: 0, server_avg_par_diff: 0 };
+    } catch (err) {
+        console.error("error fetching server global stats:", err);
+        return { server_avg_help: 0, server_avg_time: 0, server_avg_par_diff: 0 };
     }
 }
 
