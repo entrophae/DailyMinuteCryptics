@@ -21,17 +21,6 @@ const DISCORD_COLOURS = {
     ending: " [0m"
 }
 
-/** Solved result card
- *  Clue streak: X clue streak
- *  Hints used: Your hints - Average hints
- *  Par count: X below/above world par -
- *  Timing: Yout time - Average server time - Average world time 
- *  Solvers: X solvers in server - Y solvers in world
- *  Next clue in X time
- *  Explanation video
- *  Hints available
- */
-
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -40,6 +29,7 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
+
 client.commands = new Collection();
 const commands = [
     timezone,
@@ -52,9 +42,11 @@ client.login(process.env.TOKEN).catch(err => {
     console.error("Login failed!", err);
     process.exit(1);
 });
+console.log("Discord login complete!");
 
 client.on(Events.ClientReady, async () => {
     await createTables();
+
     await startHeartbeat(client, 10);
     let message = `Logged in as ${client.user.tag} in:\n`
     for (const guild of client.guilds.cache.values()) {
@@ -115,33 +107,49 @@ client.on(Events.InteractionCreate, async interaction => {
             await command.execute(interaction);
         } catch (error) {
             await devLog(client, error, "Command execution", interaction.guild?.name);
-            const errPayload = { content: 'There was an error processing this button!', flags: MessageFlags.Ephemeral };
-            if (interaction.replied || interaction.deferred) await interaction.followUp(errPayload);
-            else await interaction.reply(errPayload);
+            try {
+                const errPayload = { content: 'There was an error processing this command!', flags: MessageFlags.Ephemeral };
+                if (interaction.replied || interaction.deferred) await interaction.followUp(errPayload);
+                else await interaction.reply(errPayload);
+            } catch (fallbackError) {
+                console.error('Could not send fallback error message:', fallbackError.message);
+            }
         }
     }
     if (interaction.isButton()) {
         try {
-            await handleSolverButtons(client, interaction);
+            const parts = interaction.customId.split("_");
+            const buttonOrigin = parts[0];
+
+            if (buttonOrigin === "daily-minute-cryptics") await handleSolverButtons(client, interaction);
+
         } catch (error) {
             await devLog(client, error, "Button Interaction", interaction.guild?.name);
-            const errorPayload = { content: 'There was an error processing this button!', flags: MessageFlags.Ephemeral };
-            if (interaction.replied || interaction.deferred) await interaction.followUp(errorPayload);
-            else await interaction.reply(errorPayload);
+            try {
+                const errorPayload = { content: 'There was an error processing this button!', flags: MessageFlags.Ephemeral };
+                if (interaction.replied || interaction.deferred) await interaction.followUp(errorPayload);
+                else await interaction.reply(errorPayload);
+            } catch (fallbackError) {
+                console.error('Could not send fallback error message:', fallbackError.message);
+            }
         }
         return;
     }
     else if(interaction.isModalSubmit()){
         const modalId = interaction.customId;
         
-        if (modalId === "daily-minute-cryptics_submit-modal") {
+        if (modalId.startsWith("daily-minute-cryptics_submit-modal")) {
             try {
                 await handleAnswerSubmit(client, interaction);
             } catch (error) {
                 await devLog(client, error, "Modal Submission", interaction.guild?.name);
-                const errPayload = { content: 'There was an error processing your answer!', flags: MessageFlags.Ephemeral };
-                if (interaction.replied || interaction.deferred) await interaction.followUp(errPayload);
-                else await interaction.reply(errPayload);
+                try {
+                    const errPayload = { content: 'There was an error processing your answer!', flags: MessageFlags.Ephemeral };
+                    if (interaction.replied || interaction.deferred) await interaction.followUp(errPayload);
+                    else await interaction.reply(errPayload);
+                } catch (fallbackError) {
+                    console.error('Could not send fallback error message:', fallbackError.message);
+                }
             }
         }
         return;
