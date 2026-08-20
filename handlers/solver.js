@@ -109,7 +109,7 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
     const formattedAnsiClue = formatClueAnsi(fullClue, puzzleData.hints, userRevealedHints);
 
     const answerBlanks = puzzleData.puzzle_pieces.map((piece, index) => {
-        if (userRevealedPieces.includes(index)) return "**\`${piece}\`**";
+        if (userRevealedPieces.includes(index)) return `**\`${piece}\`**`;
         return "\`\_\`";
     }).join("  ");
 
@@ -220,7 +220,7 @@ async function generateStatsFooterText(puzzleData, serverId) {
             worldSolves = parData.parDetails?.solveCount || worldSolves;
             worldAvgHelp = parData.parDetails?.averagePar || worldAvgHelp;
             worldAvgTime = parData.parDetails?.medianSolveTimeSeconds || worldAvgTime;
-        } else {console.error('Failed to fetch fresh world stats:', error);}
+        } else {console.error('Failed to fetch fresh world stats: parData returned null');}
     } catch (error) {
         console.error('Failed to fetch fresh world stats:', error);
     }
@@ -296,8 +296,8 @@ export async function handleSolverButtons(client, interaction) {
     if (['indicators', 'fodder', 'definition'].includes(buttonCommand)) {
         const hint = puzzleData.hints?.find(h => h.type === buttonCommand);
 
-        if (!hint) {
-            return interaction.editReply(`No **${buttonCommand}** hints available for this puzzle.`);
+        if (!hint || !hint.text || hint.text.trim() === "") {
+            return interaction.editReply(`There is no **${buttonCommand}** available for this puzzle.`);
         }
 
         await updateUserHintReveals(internalUserId, puzzleData.id, buttonCommand);
