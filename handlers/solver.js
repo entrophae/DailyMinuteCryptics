@@ -147,29 +147,66 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
         .setFooter({ text: footerText})
         .setTimestamp();
 
-    const hintRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`daily-minute-cryptics_indicators_${uuid}`)
-            .setLabel('Show Indicators')
-            .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-            .setCustomId(`daily-minute-cryptics_fodder_${uuid}`)
-            .setLabel('Show Fodders')
-            .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-            .setCustomId(`daily-minute-cryptics_definition_${uuid}`)
-            .setLabel('Show Definition(s)')
-            .setStyle(ButtonStyle.Primary),
+    const hintRow = new ActionRowBuilder();
+
+    if (puzzleData.hints?.some(h => h.type === 'wordplay' && h.text?.trim())) {
+        hintRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`daily-minute-cryptics_wordplay_${uuid}`)
+                .setLabel('Show Wordplay')
+                .setStyle(ButtonStyle.Primary)
+        );
+    }
+    if (puzzleData.hints?.some(h => h.type === 'indicators' && h.text?.trim())) {
+        hintRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`daily-minute-cryptics_indicators_${uuid}`)
+                .setLabel('Show Indicators')
+                .setStyle(ButtonStyle.Primary)
+        );
+    }
+    if (puzzleData.hints?.some(h => h.type === 'fodder' && h.text?.trim())) {
+        hintRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`daily-minute-cryptics_fodder_${uuid}`)
+                .setLabel('Show Fodders')
+                .setStyle(ButtonStyle.Primary)
+        );
+    }
+    const defHints = puzzleData.hints?.filter(h => h.type === 'definition' && h.text?.trim()) || [];
+    if (defHints.length === 1) {
+        hintRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`daily-minute-cryptics_definition_${uuid}`)
+                .setLabel('Show Definition')
+                .setStyle(ButtonStyle.Primary)
+        );
+    } else if (defHints.length > 1) {
+        defHints.forEach((_, i) => {
+            hintRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`daily-minute-cryptics_definition-${i}_${uuid}`) // e.g., definition-0
+                    .setLabel(`Show Definition ${i + 1}`)
+                    .setStyle(ButtonStyle.Primary)
+            );
+        });
+    }
+    hintRow.addComponents(
         new ButtonBuilder()
             .setCustomId(`daily-minute-cryptics_reveal-letter_${uuid}`)
             .setLabel('Reveal Letter')
-            .setStyle(ButtonStyle.Primary),
+            .setStyle(ButtonStyle.Primary)
     );
+
     const actionRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(`daily-minute-cryptics_start_${uuid}`)
             .setLabel('Start Timer')
             .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId(`daily-minute-cryptics_reveal-letter_${uuid}`)
+            .setLabel('Reveal Letter')
+            .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
             .setCustomId(`daily-minute-cryptics_submit-answer_${uuid}`)
             .setLabel('Submit Answer')
@@ -293,12 +330,19 @@ export async function handleSolverButtons(client, interaction) {
         const messagePayload = await createMessage(puzzleData, serverId, userRevealedPieces, userRevealedHints, null);
         return interaction.editReply(messagePayload);
     }
-    if (['indicators', 'fodder', 'definition'].includes(buttonCommand)) {
-        const hint = puzzleData.hints?.find(h => h.type === buttonCommand);
+    if (['indicators', 'fodder', 'definition', 'wordplay'].includes(buttonCommand)) {
+        const baseCommand = buttonCommand.split('-')[0];
+        const isIndexed = buttonCommand.includes('-');
+        const targetIndex = isIndexed ? parseInt(buttonCommand.split('-')[1], 10) : 0;
+        
+        const matchingHints = puzzleData.hints?.filter(h => h.type === baseCommand && h.text?.trim());
 
-        if (!hint || !hint.text || hint.text.trim() === "") {
-            return interaction.editReply(`There is no **${buttonCommand}** available for this puzzle.`);
+        // Guard against missing hints
+        if (!matchingHints || matchingHints.length === 0 || !matchingHints[targetIndex]) {
+            return interaction.editReply(`There is no **${baseCommand}** available for this puzzle.`);
         }
+
+        const hint = puzzleData.hints?.find(h => h.type === buttonCommand);
 
         await updateUserHintReveals(internalUserId, puzzleData.id, buttonCommand);
 
@@ -306,7 +350,8 @@ export async function handleSolverButtons(client, interaction) {
         const userRevealedPieces = statRes.rows[0]?.revealed_puzzle_pieces || [];
         const userRevealedHints = statRes.rows[0]?.revealed_hint_types || [];
 
-        const hintMessage = `**${buttonCommand.toUpperCase()}:** ${hint.text}`;
+        const displayLabel = isIndexed ? `${baseCommand.toUpperCase()} ${targetIndex + 1}` : baseCommand.toUpperCase();
+        const hintMessage = `**${displayLabel}:** ${hint.text}`;
 
         const messagePayload = await createMessage(puzzleData, serverId, userRevealedPieces, userRevealedHints, hintMessage);
         return interaction.editReply(messagePayload);
@@ -358,8 +403,19 @@ function formatClueAnsi(fullClue, hints, revealedHintTypes = []) {
     let inserts = [];
     if (!hints || revealedHintTypes.length === 0) return fullClue;
 
+    let typeCounts = {};
+
     for (const hint of hints) {
-        if (revealedHintTypes.includes(hint.type) && hint.highlighting) {
+        // Keep track of how many of this hint type we've seen so far
+        if (!typeCounts[hint.type]) typeCounts[hint.type] = 0;
+        const currentIndex = typeCounts[hint.type];
+        typeCounts[hint.type]++;
+
+        // Check if the user unlocked the generic type OR this specific indexed type
+        const exactMatch = revealedHintTypes.includes(hint.type);
+        const indexedMatch = revealedHintTypes.includes(`${hint.type}-${currentIndex}`);
+
+        if ((exactMatch || indexedMatch) && hint.highlighting) {
             const color = ANSI_COLORS[hint.type] || "";
             for (const [start, end] of hint.highlighting) {
                 inserts.push({ index: start, text: color, isReset: 0 });
