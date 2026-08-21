@@ -191,12 +191,6 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
             );
         });
     }
-    hintRow.addComponents(
-        new ButtonBuilder()
-            .setCustomId(`daily-minute-cryptics_reveal-letter_${uuid}`)
-            .setLabel('Reveal Letter')
-            .setStyle(ButtonStyle.Primary)
-    );
 
     const actionRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
