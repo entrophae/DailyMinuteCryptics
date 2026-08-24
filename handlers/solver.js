@@ -469,7 +469,7 @@ export async function handleAnswerSubmit(client, interaction) {
 
             await updateUserAfterSolve(internalUserId, todayStr, helpUsedCount);
 
-            const resultEmbed = await createSolveStat(interaction, serverId, internalUserId, puzzleData);
+            const sentCount = await sendToServers(client, interaction, internalUserId, puzzleData);
 
             const hintsList = puzzleData.hints
                 ?.filter(h => h.text?.trim()) // Make sure the hint actually has text
@@ -482,7 +482,7 @@ export async function handleAnswerSubmit(client, interaction) {
                 .setDescription(hintsList || "No textual hints available for this puzzle.");
 
             return interaction.editReply({
-                content:`✅ **Correct!** Your stats have been posted in the channel `,
+                content:`✅ **Correct!** Your stats have been posted in the channel and ${(sentCount -1)} other server(s).`,
                 embeds: [hintsEmbed]
             });
 
@@ -496,6 +496,33 @@ export async function handleAnswerSubmit(client, interaction) {
         console.error("Crash inside handleAnswerSubmit:", err);
         return interaction.editReply({ content: "An internal error occurred while checking your answer." });
     }
+}
+
+async function sendToServers(client, interaction, internalUserId, puzzleData) {
+    const allSettings = await getAllServerSettings();
+    let sentCount = 0;
+
+    for (const server of allSettings) {
+        if (!server.channel_id) continue;
+        
+        const guild = client.guilds.cache.get(server.server_id);
+        if (!guild) continue;
+        
+        try {
+            const member = await guild.members.fetch(interaction.user.id).catch(() => null);
+            if (!member) continue;
+            
+            const targetChannel = guild.channels.cache.get(server.channel_id);
+            if (!targetChannel) continue;
+
+            const resultEmbed = await createSolveStat(interaction, server.server_id, internalUserId, puzzleData);
+            await targetChannel.send({ embeds: [resultEmbed] });
+            sentCount++;
+        } catch (err) {
+            console.error(`Error sending stats to ${server.server_id}:`, err);
+        }
+    }
+    return sentCount;
 }
 
 const formatTime = (seconds) => {

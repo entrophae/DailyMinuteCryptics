@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChannelType} from 'discord.js';
+import { SlashCommandBuilder, ChannelType, MessageFlags, PermissionsBitField } from 'discord.js';
 import { updateServerChannel } from '../../database.js';
 
 export default {
@@ -13,6 +13,9 @@ export default {
         ),
     
 	async execute(interaction) {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+            return interaction.reply({ content: '❌ You need Manage Channels permissions to do this.', flags: MessageFlags.Ephemeral });
+        }
         const selectedChannel = interaction.options.getChannel('channel');
 
         await interaction.deferReply();

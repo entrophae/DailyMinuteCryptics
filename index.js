@@ -7,6 +7,7 @@ import currentClue from './commands/utility/currentClue.js';
 import { syncCommand } from './deploy-commands.js';
 import { initializeServer, deleteServerSettings, createTables } from './database.js';
 import { loopServers, handleSolverButtons, handleAnswerSubmit } from './handlers/solver.js';
+import { autoSetup, handleAutoSetup } from './handlers/autoSetup.js';
 
 const COLOURS = {
     indicators: "#f5d1fd",
@@ -73,6 +74,8 @@ client.on(Events.GuildCreate, async (guild) => {
         client.commands.set(command.data.name, command);
         await syncCommand(client, guild, command);
     }
+
+    await autoSetup(guild);
 });
 
 client.on(Events.GuildDelete, async (guild) => {
@@ -95,6 +98,12 @@ client.on(Events.InteractionCreate, async interaction => {
             console.error(error);
         }
         return;
+    }
+    if (interaction.isChannelSelectMenu()) {
+        if (interaction.customId === 'setup_active_channel') {
+            await handleAutoSetup(interaction);
+            return;
+        }
     }
     if(interaction.isChatInputCommand() && !interaction.isModalSubmit()){
         const command = client.commands.get(interaction.commandName);
