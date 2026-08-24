@@ -568,12 +568,10 @@ export async function getServerGlobalStats(serverId) {
 export async function getServerLeaderboard(serverId) {
     try {
         const { rows } = await pool.query(`
-            SELECT u.user_id, u.streak, COUNT(s.id) as total_solves
+            SELECT u.user_id, u.streak, u.solves as total_solves
             FROM "user" u
             JOIN server_user su ON u.id = su.user_id
-            LEFT JOIN solve_stat s ON u.id = s.user_id AND s.is_finished = true
             WHERE su.server_id = $1
-            GROUP BY u.id
             ORDER BY total_solves DESC;
         `, [serverId]);
         
