@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { getPuzzleByUuid, getPuzzleReveals, getServerChannel, getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone, savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats, startUserPuzzle, updateServerMessageId, getServerMessageId, updatePuzzleParDetails, getServerGlobalStats, updateUserAfterSolve } from "../database.js";
+import { getPuzzleByUuid, getPuzzleReveals, getServerChannel, getUserPuzzleReveals, updateUserPuzzleReveals, getServerTimezone, savePuzzle, updateServerPuzzle, getServerPuzzle, getOrAddUser, getServerPuzzleStat, updateUserHintReveals, getAllServerSettings, getServerPuzzleDate, finishUserPuzzle, getUserSolve, getUserStats, startUserPuzzle, updateServerMessageId, getServerMessageId, updatePuzzleParDetails, updateUserAfterSolve } from "../database.js";
 import { devLog } from "../dev.js";
 
 export async function loopServers(client){
@@ -471,10 +471,19 @@ export async function handleAnswerSubmit(client, interaction) {
 
             const resultEmbed = await createSolveStat(interaction, serverId, internalUserId, puzzleData);
 
-            await interaction.channel.send({ embeds: [resultEmbed] });
+            const hintsList = puzzleData.hints
+                ?.filter(h => h.text?.trim()) // Make sure the hint actually has text
+                .map((h, i) => `**${h.type.toUpperCase()}:** ${h.text}`)
+                .join("\n\n");
+            
+            const hintsEmbed = new EmbedBuilder()
+                .setTitle('🧩 Puzzle Explanations')
+                .setColor('#add3ff')
+                .setDescription(hintsList || "No textual hints available for this puzzle.");
 
             return interaction.editReply({
-                content: "✅ **Correct!** Your stats have been posted in the channel."
+                content:`✅ **Correct!** Your stats have been posted in the channel `,
+                embeds: [hintsEmbed]
             });
 
         } else {
