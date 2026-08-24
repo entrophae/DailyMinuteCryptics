@@ -1,5 +1,4 @@
 import { ChannelType, ChannelSelectMenuBuilder, MessageFlags, PermissionsBitField, ActionRowBuilder } from 'discord.js';
-import { ActionRowBuilder, MessageFlags } from 'discord.js';
 import { updateServerChannel } from '../database.js';
 
 export async function autoSetup(guild) {

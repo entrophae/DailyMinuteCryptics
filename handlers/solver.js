@@ -543,7 +543,7 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
 
     const helpUsedCount = userSolve?.help_used ? userSolve.help_used.length : 0;
     const parDiff = helpUsedCount - puzzleData.par;
-    const avgParDiff = helpUsedCount - (puzzleData.par_details?.averagePar || 0);;
+    const avgParDiff = helpUsedCount - (puzzleData.par_details?.averagePar || 0);
 
     let parText = "Equal to target par";
     if (parDiff > 0) parText = `${parDiff} above target`;
