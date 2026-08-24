@@ -507,9 +507,15 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
 
     const helpUsedCount = userSolve?.help_used ? userSolve.help_used.length : 0;
     const parDiff = helpUsedCount - puzzleData.par;
-    let parText = "Equal to world par";
-    if (parDiff > 0) parText = `${parDiff} above world par`;
-    if (parDiff < 0) parText = `${Math.abs(parDiff)} below world par`;
+    const avgParDiff = helpUsedCount - (puzzleData.par_details?.averagePar || 0);;
+
+    let parText = "Equal to target par";
+    if (parDiff > 0) parText = `${parDiff} above target`;
+    if (parDiff < 0) parText = `${Math.abs(parDiff)} below target`;
+
+    let avgParText = "Equal to world average par";
+    if (avgParDiff > 0) avgParText = `${Number(avgParDiff.toFixed(2))} above world average`;
+    if (avgParDiff < 0) avgParText = `${Number(Math.abs(avgParDiff).toFixed(2))} below world average`;
 
     const now = new Date();
     const localStr = now.toLocaleString("en-US", { timeZone: serverTz });
@@ -532,10 +538,12 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
         .setDescription(`
 ## **<@${interaction.user.id}>**
 **🔥 Clue Streak:** ${userStats?.streak || 1} (Max: ${userStats?.max_streak || 1})
-**💡 Hints Used:** ${helpUsedCount} hints (World Avg: ${puzzleData.par_details?.averagePar || 0})
-**⛳ Par Count:** ${parText}
-
 **📈 Lifetime:** ${userStats?.total_solves || 1} solve(s) (${userStats?.perfect_solves || 0} perfect)
+
+**💡 Hints Used:** ${helpUsedCount} (Target Par: ${puzzleData.par} | World Avg: ${puzzleData.par_details?.averagePar || 0})
+**⛳ Performance:** 
+> ${parText} 
+> ${avgParText}
 
 **⏱️ Timing:**
 > **Your Time:** ${formatTime(userSolve?.time_taken_seconds)}
