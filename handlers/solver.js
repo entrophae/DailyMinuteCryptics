@@ -124,7 +124,7 @@ async function createMessage(puzzleData, serverId, userRevealedPieces = [], user
             pieceIndex++;
         }
         return wordBlanks.join(" ");
-    }).join(" \u2003\u2003 ");
+    }).join(" \u2003 ");
 
     const d = new Date(puzzleData.date);
     const day = String(d.getDate()).padStart(2, '0');
