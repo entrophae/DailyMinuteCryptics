@@ -4,6 +4,7 @@ import timezone from './commands/settings/timezone.js';
 import channel from './commands/settings/channel.js';
 import stats from './commands/utility/stats.js';
 import currentClue from './commands/utility/currentClue.js';
+import reloadClue from './commands/utility/reloadClue.js';
 import { syncCommand } from './deploy-commands.js';
 import { initializeServer, deleteServerSettings, createTables } from './database.js';
 import { loopServers, handleSolverButtons, handleAnswerSubmit } from './handlers/solver.js';
@@ -36,7 +37,8 @@ const commands = [
     timezone,
     channel,
     stats,
-    currentClue
+    currentClue,
+    reloadClue
 ];
 
 client.login(process.env.TOKEN).catch(err => {
