@@ -103,23 +103,34 @@ export async function sendClueEmbed(client, serverId) {
 
 async function createMessage(puzzleData, serverId, userRevealedPieces = [], userRevealedHints = [], hintMessage = null){
     const fullClue = puzzleData.clue.join(" ");
-    const answerLength = puzzleData.puzzle_pieces.length;
     const uuid = puzzleData.puzzle_uuid;
 
     const formattedAnsiClue = formatClueAnsi(fullClue, puzzleData.hints, userRevealedHints);
+    const config = puzzleData.config || [puzzleData.puzzle_pieces.length];
 
-    const answerBlanks = puzzleData.puzzle_pieces.map((piece, index) => {
-        if (userRevealedPieces.includes(index)) return `**\`${piece}\`**`;
-        return "\`\_\`";
-    }).join("  ");
+    const answerLength = config.join(", ");
+
+    let pieceIndex = 0;
+    
+    const answerBlanks = config.map(wordLength => {
+        let wordBlanks = [];
+        for (let i = 0; i < wordLength; i++) {
+            const piece = puzzleData.puzzle_pieces[pieceIndex];
+            if (userRevealedPieces.includes(pieceIndex)) {
+                wordBlanks.push(`**\`${piece}\`**`);
+            } else {
+                wordBlanks.push("\`\_\`");
+            }
+            pieceIndex++;
+        }
+        return wordBlanks.join(" ");
+    }).join(" \u2003\u2003 ");
 
     const d = new Date(puzzleData.date);
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     const date = `${day}.${month}.${year}`;
-
-    const serverData = getServerPuzzleStat(puzzleData.puzzle_uuid, serverId);
 
     let description = `## Clue:\n\`\`\`ansi\n${formattedAnsiClue} (${answerLength})\n\`\`\`\n## Answer:\n# ${answerBlanks}`;
     if (hintMessage) {
@@ -596,3 +607,30 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
     return resultEmbed;
 }
 
+export async function reloadLiveMessage(client, serverId) {
+    try {
+        const channelId = await getServerChannel(serverId);
+        const messageId = await getServerMessageId(serverId);
+        if (!channelId || !messageId) return false;
+        
+        const guild = client.guilds.cache.get(serverId);
+        const channel = guild?.channels.cache.get(channelId);
+        if (!channel) return false;
+        
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+        if (!message) return false;
+        
+        const puzzleData = await getServerPuzzle(serverId);
+        if (!puzzleData) return false;
+        
+        // Rebuild the message payload with the new config data
+        const messagePayload = await createMessage(puzzleData, serverId);
+        
+        // Edit the live message
+        await message.edit(messagePayload);
+        return true;
+    } catch (err) {
+        console.error(`Failed to reload live message for server ${serverId}:`, err);
+        return false;
+    }
+}

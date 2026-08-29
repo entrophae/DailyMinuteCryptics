@@ -62,6 +62,7 @@ export async function createTables() {
                 puzzle_pieces TEXT[],
                 letter_reveal_order INT[],
                 par INT,
+                config INT[],
                 explainer_video TEXT,
                 date DATE,
                 hints JSONB,
@@ -165,11 +166,12 @@ export async function savePuzzle(puzzleData) {
             INSERT INTO puzzle (
                 puzzle_uuid, date, answer, par, setter_name, 
                 clue, puzzle_pieces, letter_reveal_order, explainer_video, 
-                hints, par_details
+                hints, par_details, config
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT (puzzle_uuid) DO UPDATE
-            SET par_details = EXCLUDED.par_details
+            SET par_details = EXCLUDED.par_details,
+                config = EXCLUDED.config
             RETURNING id;
         `, [
             puzzleData.puzzleId,
@@ -182,7 +184,8 @@ export async function savePuzzle(puzzleData) {
             puzzleData.letterRevealOrder,
             puzzleData.explainerVideo,
             JSON.stringify(filteredHints),
-            JSON.stringify(filteredParDetails)
+            JSON.stringify(filteredParDetails),
+            puzzleData.config
         ]);
 
         return rows[0].id;
