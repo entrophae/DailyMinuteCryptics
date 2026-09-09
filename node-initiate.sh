@@ -30,8 +30,8 @@ if [ "$1" == "rebuild" ]; then
 fi
 
 # Prevent multiple instances from running at the same time
-exec 200>"/tmp/${APP_NAME}.lock"
-flock -n 200 || { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Another instance is already running." >> bot.log; exit 1; }
+# exec 200>"/tmp/${APP_NAME}.lock"
+# flock -n 200 || { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Another instance is already running." >> bot.log; exit 1; }
 
 # Ensure HEALTHCHECK_URL is set
 if [ -z "$HEALTHCHECK_URL" ]; then
@@ -70,6 +70,7 @@ else
 fi
 
 # Run app with auto-restart + timestamps
+set -o pipefail
 while true; do
   until nc -z 192.168.2.56 5432; do
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Waiting for database to wake up..." >> bot.log
@@ -79,9 +80,9 @@ while true; do
 
   # Stream output to both bot.log and temporary file
   node --dns-result-order=ipv4first --trace-warnings index.js --name="$APP_NAME" 2>&1 | ts '[%Y-%m-%d %H:%M:%S]' >> bot.log
-  EXIT_CODE=${PIPESTATUS[0]}
+  EXIT_CODE=$?
 
-  if [ $EXIT_CODE -ne 0 ]; then
+  if [ "$EXIT_CODE" != "0" ]; then
     CRASH_LOG=$(tail -n 50 bot.log)
     # On crash, send Healthchecks failure ping with output
     curl -fsS --retry 3 --data-raw "$CRASH_LOG" "$HEALTHCHECK_URL/$EXIT_CODE" > /dev/null
