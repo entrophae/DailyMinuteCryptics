@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
 import { getServerLeaderboard, getUserStats, getServerGlobalStats } from '../../database.js';
+import { COLOURS } from '../../constants.js';
 
 export default {
     data: new SlashCommandBuilder()
@@ -51,7 +52,7 @@ async function createEmbed(interaction) {
 
         const embed = new EmbedBuilder()
             .setTitle(`Server Stats: ${targetUser.username}`)
-            .setColor('#f5d1fd')
+            .setColor(COLOURS.indicators.hex)
             .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
             .setDescription(`
 ## **<@${targetUser.id}>**
@@ -96,7 +97,7 @@ async function createEmbed(interaction) {
 
             return new EmbedBuilder()
                 .setTitle(`🏆 Server Leaderboard: ${interaction.guild.name}`)
-                .setColor('#ffd700')
+                .setColor(COLOURS.leaderboard.hex)
                 .setDescription(message)
                 .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
                 .setFooter({ text: `Page ${page + 1} of ${totalPages} | Daily Minute Cryptics` })
@@ -154,8 +155,7 @@ async function createEmbed(interaction) {
     }
 }
 
-
-async function createUserStat(interaction, serverId) {
+export async function createUserStat(interaction, serverId) {
     const userStats = await getUserStats(interaction.user.id);
     const serverStats = await getServerGlobalStats(serverId);
 
@@ -168,7 +168,7 @@ async function createUserStat(interaction, serverId) {
 
     const resultEmbed = new EmbedBuilder()
         .setTitle(`📊 Lifetime Stats`)
-        .setColor('#fff2b1')
+        .setColor(COLOURS.fodder.hex)
         .setDescription(`
 ## **<@${interaction.user.id}>**
 **✨ Total Solves:** ${userStats?.total_solves || 0} (${userStats?.perfect_solves || 0} perfect)

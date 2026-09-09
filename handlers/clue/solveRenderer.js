@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { getAllServerSettings, getUserSolve, getUserStats, getServerPuzzleStat, getServerTimezone } from "../../database.js";
+import { COLOURS } from '../../constants.js';
 
 
 export async function sendToServers(client, interaction, internalUserId, puzzleData) {
@@ -73,7 +74,7 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
 
     const resultEmbed = new EmbedBuilder()
         .setTitle(`🎉 Puzzle Solved for ${date}!`)
-        .setColor('#add3ff')
+        .setColor(COLOURS.definition.hex)
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(`
 ## **<@${interaction.user.id}>**

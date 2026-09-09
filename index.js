@@ -7,21 +7,9 @@ import currentClue from './commands/utility/currentClue.js';
 import reloadClue from './commands/utility/reloadClue.js';
 import { syncCommand } from './deploy-commands.js';
 import { initializeServer, deleteServerSettings, createTables } from './database.js';
-import { loopServers, handleSolverButtons, handleAnswerSubmit } from './handlers/solver.js';
+import { loopServers } from './handlers/clue/puzzleSync.js';
+import { handleSolverButtons, handleAnswerSubmit } from './handlers/clue/solveSession.js';
 import { autoSetup, handleAutoSetup } from './handlers/autoSetup.js';
-
-const COLOURS = {
-    indicators: "#f5d1fd",
-    fodder: "#fff2b1",
-    definition: "#add3ff",
-    card: "#f4f5f6"
-}
-const DISCORD_COLOURS = {
-    indicators: "[45m ",
-    fodder: "[43m ",
-    definition: "[44m ",
-    ending: " [0m"
-}
 
 const client = new Client({
     intents: [

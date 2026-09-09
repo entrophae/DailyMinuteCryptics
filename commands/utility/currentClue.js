@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getServerChannel } from '../../database.js';
-import { sendClueEmbed } from '../../handlers/solver.js';
+import { sendClueEmbed } from '../../handlers/clue/clueRenderer.js';
 
 export default {
     

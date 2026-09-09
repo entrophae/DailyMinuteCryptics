@@ -3,6 +3,7 @@ import { getPuzzleByUuid, getOrAddUser, getUserPuzzleReveals, startUserPuzzle, u
 import { devLog } from "../../dev.js";
 import { createMessage } from "./clueRenderer.js";
 import { sendToServers } from "./solveRenderer.js";
+import { COLOURS } from '../../constants.js';
 
 export async function handleSolverButtons(client, interaction) {
     const serverId = interaction.guild.id;
@@ -178,7 +179,7 @@ export async function handleAnswerSubmit(client, interaction) {
             
             const hintsEmbed = new EmbedBuilder()
                 .setTitle('🧩 Puzzle Explanations')
-                .setColor('#add3ff')
+                .setColor(COLOURS.definition.hex)
                 .setDescription(hintsList || "No textual hints available for this puzzle.");
 
             return interaction.editReply({

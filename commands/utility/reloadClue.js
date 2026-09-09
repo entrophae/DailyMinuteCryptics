@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, MessageFlags, PermissionsBitField } from 'discord.js';
-import { getServerTimezone, savePuzzle, updateServerPuzzle } from '../../database.js';
-import { reloadLiveMessage } from '../../handlers/solver.js';
+import { savePuzzle, updateServerPuzzle } from '../../database.js';
+import { reloadLiveMessage } from '../../handlers/clue/clueRenderer.js';
+import { getPuzzleRequestData } from '../../handlers/clue/puzzleSync.js';
 
 export default {
     data: new SlashCommandBuilder()
@@ -13,16 +14,12 @@ export default {
 
         try {
             const serverId = interaction.guild.id;
-            const tz = await getServerTimezone(serverId);
             
-            const url = new URL(`https://www.minutecryptic.com/api/daily_puzzle/today?tz=${encodeURIComponent(tz)}`);
-            const request = await fetch(url);
+            const puzzleData = await getPuzzleRequestData(serverId);
             
-            if (!request.ok) {
-                return interaction.editReply(`Failed to fetch puzzle: API returned ${request.status}`);
+            if (puzzleData.ok === false) {
+                return interaction.editReply(`Failed to fetch puzzle: API returned ${puzzleData.status}`);
             }
-
-            const puzzleData = await request.json();
 
             await savePuzzle(puzzleData);
             await updateServerPuzzle(serverId, puzzleData.puzzleId, puzzleData.date);

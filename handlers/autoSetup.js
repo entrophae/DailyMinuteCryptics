@@ -1,5 +1,6 @@
 import { ChannelType, ChannelSelectMenuBuilder, MessageFlags, PermissionsBitField, ActionRowBuilder } from 'discord.js';
 import { updateServerChannel } from '../database.js';
+import { COLOURS } from '../constants.js';
 
 export async function autoSetup(guild) {
     try {
@@ -10,7 +11,7 @@ export async function autoSetup(guild) {
         if (setupChannel) {
             const setupEmbed = {
                 title: '👋 Thanks for adding Daily Minute Cryptics!',
-                color: 0xf5d1fd,
+                color: COLOURS.indicators.hex,
                 description: 'To get started, please select the channel below where you want the daily clues to be posted:'
             };
 

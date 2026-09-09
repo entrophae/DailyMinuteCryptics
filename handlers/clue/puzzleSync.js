@@ -1,6 +1,7 @@
 import { getAllServerSettings, getServerTimezone, getServerPuzzleDate, updatePuzzleParDetails, savePuzzle, updateServerPuzzle } from "../../database.js";
 import { devLog } from "../../dev.js";
 import { sendClueEmbed, updateLiveStats } from "./clueRenderer.js";
+import { URLS } from "../../constants.js";
 
 export async function loopServers(client){
     setInterval(async () => {
@@ -39,18 +40,18 @@ async function getCurrentDate(serverId) {
 
 export async function getPuzzleRequestData(serverId) {
     const tz = await getServerTimezone(serverId);
-    const url = new URL(`https://www.minutecryptic.com/api/daily_puzzle/today?tz=${encodeURIComponent(tz)}`);
+    const url = new URL(`${URLS.currentClue}${encodeURIComponent(tz)}`);
     const request = await fetch(url);
     if (!request.ok) {
         console.error(`Failed to fetch puzzle: ${request.status} : ${url}`);
-        return null;
+        return request
     }
     else return await request.json();
 }
 
 async function getParRequestData(serverId) {
     const currentDate = await getCurrentDate(serverId);
-    const url = new URL(`https://www.minutecryptic.com/api/daily_puzzle/par/${currentDate}`)
+    const url = new URL(`${URLS.puzzlePar}${currentDate}`)
     const request = await fetch(url);
     if (!request.ok) {
         console.error(`Failed to fetch puzzle par: ${request.status} : ${url}`);

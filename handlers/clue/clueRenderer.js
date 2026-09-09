@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getServerChannel, getServerMessageId, getServerPuzzle, getServerPuzzleStat, updateServerMessageId } from "../../database.js";
 import { getParRequestData } from "./puzzleSync.js";
+import { COLOURS, SPACES, URLS, COURSES } from '../../constants.js';
 
 export async function sendClueEmbed(client, serverId) {
     const puzzleData = await getServerPuzzle(serverId);
@@ -39,7 +40,7 @@ export async function createMessage(puzzleData, serverId, userRevealedPieces = [
             pieceIndex++;
         }
         return wordBlanks.join(" ");
-    }).join(" \u2003 ");
+    }).join(` ${SPACES.ems} `);
 
     const d = new Date(puzzleData.date);
     const day = String(d.getDate()).padStart(2, '0');
@@ -53,22 +54,21 @@ export async function createMessage(puzzleData, serverId, userRevealedPieces = [
     }
 
     const footerText = await generateStatsFooterText(puzzleData, serverId);
-    const coursePrefix = "https://www.minutecryptic.com/course";
 
     const embed = new EmbedBuilder()
-        .setColor("#f4f5f6")
+        .setColor(COLOURS.default.hex)
         .setAuthor({ 
             name: `By ${puzzleData.setter_name} | ${date}`, 
-            url: "https://minutecryptic.com" 
+            url: URLS.minuteCryptic 
         })
         .setDescription(description)
         .addFields(
-            { name: 'Color Legend:', value: `\`\`\`ansi\nDefinition: [46m [0m \nIndicators: [45m [0m \nFodder: [43m [0m\n\`\`\``, inline: true },
-            { name: '\u200B', value: '\u200B', inline: true },
-            { name: '\u200B', value: '\u200B', inline: true },
-            { name: 'Letterplay Course:', value: `\n-# [Basics](${coursePrefix}/letterplay/basics/1)\n-# [Anagrams](${coursePrefix}/letterplay/anagrams/1)\n-# [Selectors](${coursePrefix}/letterplay/selectors/1)\n-# [Hiddens](${coursePrefix}/letterplay/hiddens/1)\n-# [Reversals](${coursePrefix}/letterplay/reversals/1)`, inline: true },
-            { name: 'Wordplay Course:', value: `\n-# [Synonyms](${coursePrefix}/wordplay/synonyms/1)\n-# [Symbols](${coursePrefix}/wordplay/symbols/1)\n-# [Containers](${coursePrefix}/wordplay/containers/1)\n-# [Deletions](${coursePrefix}/wordplay/deletions/1)\n-# [Homophones](${coursePrefix}/wordplay/homophones/1)`, inline: true },
-            { name: 'Weirdplay Course:', value: `\n-# [Translations](${coursePrefix}/weirdplay/translation/1)\n-# [Homoglyphs](${coursePrefix}/weirdplay/homoglyphs/1)\n-# [Double Definitions](${coursePrefix}/weirdplay/double-definitions/1)\n-# [Rebuses](${coursePrefix}/weirdplay/rebuses/1)\n-# [&lits](${coursePrefix}/weirdplay/and-lits/1)`, inline: true },
+            { name: 'Color Legend:', value: `\`\`\`ansi\nDefinition: ${COLOURS.definition.ansi} ${COLOURS.default.ansi} \nIndicators: ${COLOURS.indicators.ansi} ${COLOURS.default.ansi} \nFodder: ${COLOURS.fodder.ansi} ${COLOURS.default.ansi}\n\`\`\``, inline: true },
+            { name: SPACES.zws, value: SPACES.zws, inline: true },
+            { name: SPACES.zws, value: SPACES.zws, inline: true },
+            { name: 'Letterplay Courses:', value: COURSES.letterplay, inline: true },
+            { name: 'Wordplay Courses:', value: COURSES.wordplay, inline: true },
+            { name: 'Weirdplay Courses:', value: COURSES.weirdplay, inline: true },
         )
         .setFooter({ text: footerText})
         .setTimestamp();
@@ -111,7 +111,7 @@ export async function createMessage(puzzleData, serverId, userRevealedPieces = [
         defHints.forEach((_, i) => {
             hintRow.addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`daily-minute-cryptics_definition-${i}_${uuid}`) // e.g., definition-0
+                    .setCustomId(`daily-minute-cryptics_definition-${i}_${uuid}`)
                     .setLabel(`Show Definition ${i + 1}`)
                     .setStyle(ButtonStyle.Primary)
             );
@@ -136,7 +136,7 @@ export async function createMessage(puzzleData, serverId, userRevealedPieces = [
     return { embeds: [embed], components: [hintRow, actionRow] };
 }
 
-async function updateLiveStats(client, serverId) {
+export async function updateLiveStats(client, serverId) {
     try {
         const channelId = await getServerChannel(serverId);
         const messageId = await getServerMessageId(serverId);
@@ -184,14 +184,7 @@ async function generateStatsFooterText(puzzleData, serverId) {
     return `\n🌍 Stats: Total Solves: ${worldSolves} | Average Help: ${worldAvgHelp} | Average Time: ${worldAvgTime}s\n🏡 Total Solves: ${serverStats.total_solves} | Average Help: ${serverStats.average_help} | Average Time: ${serverStats.average_time}s\n`;
 }
 
-
 function formatClueAnsi(fullClue, hints, revealedHintTypes = []) {
-    const ANSI_COLORS = {
-        definition: "\u001b[46m",
-        indicators: "\u001b[45m",
-        fodder: "\u001b[43m",
-        reset: "\u001b[0m"
-    };
 
     let inserts = [];
     if (!hints || revealedHintTypes.length === 0) return fullClue;
@@ -209,10 +202,10 @@ function formatClueAnsi(fullClue, hints, revealedHintTypes = []) {
         const indexedMatch = revealedHintTypes.includes(`${hint.type}-${currentIndex}`);
 
         if ((exactMatch || indexedMatch) && hint.highlighting) {
-            const color = ANSI_COLORS[hint.type] || "";
+            const color = COLOURS[hint.type].ansi || "";
             for (const [start, end] of hint.highlighting) {
                 inserts.push({ index: start, text: color, isReset: 0 });
-                inserts.push({ index: end, text: ANSI_COLORS.reset, isReset: 1 });
+                inserts.push({ index: end, text: COLOURS.default.ansi, isReset: 1 });
             }
         }
     }
