@@ -75,13 +75,23 @@ export async function createMessage(puzzleData, serverId, userRevealedPieces = [
 
     const hintRow = new ActionRowBuilder();
 
-    if (puzzleData.hints?.some(h => h.type === 'wordplay' && h.text?.trim())) {
+    const wordplayHints = puzzleData.hints?.filter(h => h.type === 'wordplay' && h.text?.trim()) || [];
+    if (wordplayHints.length === 1) {
         hintRow.addComponents(
             new ButtonBuilder()
                 .setCustomId(`daily-minute-cryptics_wordplay_${uuid}`)
                 .setLabel('Show Wordplay')
                 .setStyle(ButtonStyle.Primary)
         );
+    } else if (wordplayHints.length > 1) {
+        wordplayHints.forEach((_, i) => {
+            hintRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`daily-minute-cryptics_wordplay-${i}_${uuid}`)
+                    .setLabel(`Show Wordplay ${i + 1}`)
+                    .setStyle(ButtonStyle.Primary)
+            );
+        });
     }
     if (puzzleData.hints?.some(h => h.type === 'indicators' && h.text?.trim())) {
         hintRow.addComponents(
