@@ -82,7 +82,7 @@ export async function checkForNewClue(client, serverId) {
             }
         }
 
-        if (savedPuzzleData && savedPuzzleData.puzzle_uuid !== puzzleData.puzzle_uuid) {
+        if (savedPuzzleData && savedPuzzleData.puzzle_uuid === puzzleData.puzzle_uuid) {
             return {isNew: false, newPuzzleData: null, oldPuzzleData: savedPuzzleData};
         }
         return {isNew: true, newPuzzleData: puzzleData, oldPuzzleData: savedPuzzleData};
