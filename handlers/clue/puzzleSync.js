@@ -69,7 +69,6 @@ export async function getParRequestData(serverId) {
 }
 
 export async function checkForNewClue(client, serverId) {
-    const currentDate = await getCurrentDate(serverId);
     const savedPuzzleData = await getServerPuzzle(serverId);
 
     try {
@@ -83,7 +82,7 @@ export async function checkForNewClue(client, serverId) {
             }
         }
 
-        if (savedPuzzleData.date === currentDate) {
+        if (savedPuzzleData && savedPuzzleData.puzzle_uuid !== puzzleData.puzzle_uuid) {
             return {isNew: false, newPuzzleData: null, oldPuzzleData: savedPuzzleData};
         }
         return {isNew: true, newPuzzleData: puzzleData, oldPuzzleData: savedPuzzleData};
