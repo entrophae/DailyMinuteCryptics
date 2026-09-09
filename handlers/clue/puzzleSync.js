@@ -1,6 +1,6 @@
-import { getAllServerSettings, getServerTimezone, getServerPuzzleDate, updatePuzzleParDetails, savePuzzle, updateServerPuzzle } from "../../database.js";
+import { getAllServerSettings, getServerTimezone, getServerPuzzle, updatePuzzleParDetails, savePuzzle, updateServerPuzzle, getServerThreadId } from "../../database.js";
 import { devLog } from "../../dev.js";
-import { sendClueEmbed, updateLiveStats } from "./clueRenderer.js";
+import { sendClueEmbed, updateLiveStats, createThread } from "./clueRenderer.js";
 import { URLS } from "../../constants.js";
 
 export async function loopServers(client){
@@ -10,12 +10,19 @@ export async function loopServers(client){
 
             for (const server of servers) {
                 try {
-                    const isNewClue = await checkForNewClue(client, server.server_id);
+                    const updateCheck = await checkForNewClue(client, server.server_id);
 
+                    if (updateCheck.isNew) {
                     if (isNewClue) {
+                        await savePuzzle(updateCheck.newPuzzleData);
+                        await updateServerPuzzle(server.server_id, updateCheck.newPuzzleData.puzzleId, updateCheck.newPuzzleData.date);
                         await sendClueEmbed(client, server.server_id);
                     } else {
-                        await updateLiveStats(client, server.server_id);
+                        const message = await updateLiveStats(client, server.server_id);
+                        // fix for the current Clue as of 09.09.2026
+                        if ( message && await getServerThreadId(server.server_id) == null ) {
+                            await createThread(message, server.server_id, updateCheck.oldPuzzleData);
+                        }
                     }
                 } catch (serverErr) {
                     console.error(`Loop error for server ${server.server_id}:`, serverErr);
@@ -62,7 +69,7 @@ async function getParRequestData(serverId) {
 
 export async function checkForNewClue(client, serverId) {
     const currentDate = await getCurrentDate(serverId);
-    const savedDate = await getServerPuzzleDate(serverId);
+    const savedPuzzleData = await getServerPuzzle(serverId);
 
     try {
         const puzzleData = await getPuzzleRequestData(serverId);
@@ -75,14 +82,10 @@ export async function checkForNewClue(client, serverId) {
             }
         }
 
-        if (savedDate === currentDate) {
-            return false;
+        if (savedPuzzleData.date === currentDate) {
+            return {isNew: false, newPuzzleData: null, oldPuzzleData: savedPuzzleData};
         }
-
-        await savePuzzle(puzzleData);
-        await updateServerPuzzle(serverId, puzzleData.puzzleId, puzzleData.date);
-
-        return true;
+        return {isNew: true, newPuzzleData: puzzleData, oldPuzzleData: savedPuzzleData};
     } catch (e) {
         devLog(client, e, "Fetching new Clue");
         return false;

@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
-import { getAllServerSettings, getUserSolve, getUserStats, getServerPuzzleStat, getServerTimezone } from "../../database.js";
+import { getAllServerSettings, getUserSolve, getUserStats, getServerPuzzleStat, getServerTimezone, getServerMessageId, getServerThreadId, getServerChannel } from "../../database.js";
 import { COLOURS } from '../../constants.js';
+import { formatDate } from './clueRenderer.js';
 
 
 export async function sendToServers(client, interaction, internalUserId, puzzleData) {
@@ -30,7 +31,7 @@ export async function sendToServers(client, interaction, internalUserId, puzzleD
     return sentCount;
 }
 
-const formatTime = (seconds) => {
+export const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return "0s";
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -45,6 +46,9 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
     const userStats = await getUserStats(interaction.user.id);
     const serverStats = await getServerPuzzleStat(puzzleData.puzzle_uuid, serverId);
     const serverTz = await getServerTimezone(serverId);
+    const activeChannelId = await getServerChannel(serverId);
+    const clueMessageId = await getServerMessageId(serverId)
+    const clueThreadId = await getServerThreadId(serverId)
 
     const helpUsedCount = userSolve?.help_used ? userSolve.help_used.length : 0;
     const parDiff = helpUsedCount - puzzleData.par;
@@ -66,14 +70,8 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
     const epochDiff = localMidnight.getTime() - new Date(localStr).getTime();
     const nextMidnightEpoch = Math.floor((now.getTime() + epochDiff) / 1000);
 
-    const d = new Date(puzzleData.date);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    const date = `${day}.${month}.${year}`;
-
     const resultEmbed = new EmbedBuilder()
-        .setTitle(`🎉 Puzzle Solved for ${date}!`)
+        .setTitle(`🎉 Puzzle Solved for ${formatDate(puzzleData.date)}!`)
         .setColor(COLOURS.definition.hex)
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(`
@@ -93,7 +91,10 @@ async function createSolveStat(interaction, serverId, internalUserId, puzzleData
 
 **⏳ Next Clue:** <t:${nextMidnightEpoch}:R>
 
-[**▶️ Watch Explanation Video**](${puzzleData.explainer_video})
+**▶️ [Watch The Explanation Video](${puzzleData.explainer_video})**
+
+**🧩 [Scroll Back To The Clue](https://discord.com/channels/${serverId}/${activeChannelId}/${clueMessageId})**
+**💬 [Join The Discussion Thread](https://discord.com/channels/${serverId}/${clueThreadId})** _(spoilers)_
         `)
         .setFooter({ text: "DailyMinuteCryptics" })
         .setTimestamp();

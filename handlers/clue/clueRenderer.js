@@ -1,5 +1,5 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getServerChannel, getServerMessageId, getServerPuzzle, getServerPuzzleStat, updateServerMessageId } from "../../database.js";
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ThreadAutoArchiveDuration } from 'discord.js';
+import { getServerChannel, getServerMessageId, getServerPuzzle, getServerPuzzleStat, updateServerMessageId, updateServerThreadId } from "../../database.js";
 import { getParRequestData } from "./puzzleSync.js";
 import { COLOURS, SPACES, URLS, COURSES } from '../../constants.js';
 
@@ -10,10 +10,23 @@ export async function sendClueEmbed(client, serverId) {
     if (guild && activeChannelId) {
         const activeChannel = guild.channels.cache.get(activeChannelId);
         if (activeChannel) {
-            const message = await createMessage(puzzleData, serverId);
-            const sentMessage = await activeChannel.send(message);
-            await updateServerMessageId(serverId, sentMessage.id);
+            const messageContent = await createMessage(puzzleData, serverId);
+            const message = await activeChannel.send(messageContent);
+            await updateServerMessageId(serverId, message.id);
+            await createThread(message, serverId, puzzleData);
         }
+    }
+}
+
+export async function createThread(message, serverId, puzzleData) {
+    try {
+        const thread = await message.startThread({
+            name: `Clue Discussion: ${formatDate(puzzleData.date)}`,
+            autoArchiveDuration: ThreadAutoArchiveDuration.ThreeDays
+        });
+        await updateServerThreadId(serverId, thread.id);
+    } catch (err) {
+        console.error(`Could not create thread in server ${serverId}:`, err);
     }
 }
 
@@ -42,12 +55,6 @@ export async function createMessage(puzzleData, serverId, userRevealedPieces = [
         return wordBlanks.join(" ");
     }).join(` ${SPACES.ems} `);
 
-    const d = new Date(puzzleData.date);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    const date = `${day}.${month}.${year}`;
-
     let description = `## Clue:\n\`\`\`ansi\n${formattedAnsiClue} (${answerLength})\n\`\`\`\n## Answer:\n# ${answerBlanks}`;
     if (hintMessage) {
         description += `\n\n**Hint:**\n> ${hintMessage}`;
@@ -58,7 +65,7 @@ export async function createMessage(puzzleData, serverId, userRevealedPieces = [
     const embed = new EmbedBuilder()
         .setColor(COLOURS.default.hex)
         .setAuthor({ 
-            name: `By ${puzzleData.setter_name} | ${date}`, 
+            name: `By ${puzzleData.setter_name} | ${formatDate(puzzleData.date)}`, 
             url: URLS.minuteCryptic 
         })
         .setDescription(description)
@@ -169,8 +176,10 @@ export async function updateLiveStats(client, serverId) {
             const updatedEmbed = EmbedBuilder.from(oldEmbed).setFooter({ text: newFooterText });
             await message.edit({ embeds: [updatedEmbed] });
         }
+        return message;
     } catch (err) {
         console.error(`Failed to background update live stats for server ${serverId}:`, err);
+        return null;
     }
 }
 
@@ -234,6 +243,14 @@ function formatClueAnsi(fullClue, hints, revealedHintTypes = []) {
     return formattedClue;
 }
 
+export function formatDate(unformattedDate){
+    const d = new Date(unformattedDate);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const date = `${day}.${month}.${year}`;
+    return date;
+}
 
 export async function reloadLiveMessage(client, serverId) {
     try {

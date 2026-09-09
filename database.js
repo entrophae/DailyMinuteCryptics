@@ -96,6 +96,7 @@ export async function createTables() {
                 current_puzzle_uuid TEXT,
                 current_puzzle_date DATE,
                 current_puzzle_message_id TEXT,
+                current_puzzle_thread_id TEXT,
                 puzzle_stat JSONB[]
             );
         `);
@@ -230,6 +231,18 @@ export async function updateServerMessageId(serverId, messageId) {
     }
 }
 
+export async function updateServerThreadId(serverId, threadId) {
+    try {
+        await pool.query(`
+            UPDATE server_setting 
+            SET current_puzzle_thread_id = $2 
+            WHERE server_id = $1
+        `, [serverId, threadId]);
+    } catch (err) {
+        console.error("error updating server thread id:", err);
+    }
+}
+
 export async function getServerMessageId(serverId) {
     try {
         const { rows } = await pool.query(`
@@ -238,6 +251,17 @@ export async function getServerMessageId(serverId) {
         return rows.length > 0 ? rows[0].current_puzzle_message_id : null;
     } catch (error) {
         console.error('error fetching server message id:', error);
+        return null;
+    }
+}
+export async function getServerThreadId(serverId) {
+    try {
+        const { rows } = await pool.query(`
+            SELECT current_puzzle_thread_id FROM server_setting WHERE server_id = $1
+        `, [serverId]);
+        return rows.length > 0 ? rows[0].current_puzzle_thread_id : null;
+    } catch (error) {
+        console.error('error fetching server thread id:', error);
         return null;
     }
 }
