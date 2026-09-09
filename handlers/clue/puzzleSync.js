@@ -2,6 +2,7 @@ import { getAllServerSettings, getServerTimezone, getServerPuzzle, updatePuzzleP
 import { devLog } from "../../dev.js";
 import { sendClueEmbed, updateLiveStats, createThread } from "./clueRenderer.js";
 import { URLS } from "../../constants.js";
+import { sendDailyRecap } from "../dailyLeaderboard.js";
 
 export async function loopServers(client){
     setInterval(async () => {
@@ -13,7 +14,7 @@ export async function loopServers(client){
                     const updateCheck = await checkForNewClue(client, server.server_id);
 
                     if (updateCheck.isNew) {
-                    if (isNewClue) {
+                        await sendDailyRecap(client, server.server_id, updateCheck.oldPuzzleData);
                         await savePuzzle(updateCheck.newPuzzleData);
                         await updateServerPuzzle(server.server_id, updateCheck.newPuzzleData.puzzleId, updateCheck.newPuzzleData.date);
                         await sendClueEmbed(client, server.server_id);

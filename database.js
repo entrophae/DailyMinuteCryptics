@@ -609,6 +609,27 @@ export async function getServerLeaderboard(serverId) {
     }
 }
 
+export async function getDailyServerLeaderboard(serverId, internalPuzzleId) {
+    try {
+        const { rows } = await pool.query(`
+            SELECT 
+                u.user_id, 
+                COALESCE(cardinality(s.help_used), 0) as hints_used,
+                EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) as time_taken_seconds
+            FROM solve_stat s
+            JOIN "user" u ON s.user_id = u.id
+            JOIN server_user su ON u.id = su.user_id
+            WHERE su.server_id = $1 AND s.puzzle_id = $2 AND s.is_finished = true
+            ORDER BY hints_used ASC, time_taken_seconds ASC;
+        `, [serverId, internalPuzzleId]);
+        
+        return rows;
+    } catch (err) {
+        console.error("error fetching daily puzzle leaderboard:", err);
+        return [];
+    }
+}
+
 export async function getPuzzleReveals(internalPuzzleId) {
     return await pool.query(
         'SELECT letter_reveal_order, puzzle_pieces FROM puzzle WHERE id = $1',
