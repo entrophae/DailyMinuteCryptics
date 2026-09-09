@@ -57,7 +57,7 @@ export async function getPuzzleRequestData(serverId) {
     else return await request.json();
 }
 
-async function getParRequestData(serverId) {
+export async function getParRequestData(serverId) {
     const currentDate = await getCurrentDate(serverId);
     const url = new URL(`${URLS.puzzlePar}${currentDate}`)
     const request = await fetch(url);
