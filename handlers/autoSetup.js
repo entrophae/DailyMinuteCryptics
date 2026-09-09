@@ -8,7 +8,7 @@ export async function autoSetup(guild) {
             c.type === 0 && c.permissionsFor(guild.members.me).has('SendMessages')
         );
 
-        if (setupChannel) {
+        if (setupChannel.permissionsFor(guild.members.me).has('SendMessages')) {
             const setupEmbed = {
                 title: '👋 Thanks for adding Daily Minute Cryptics!',
                 color: COLOURS.indicators.hex,
@@ -23,6 +23,8 @@ export async function autoSetup(guild) {
             );
 
             await setupChannel.send({ embeds: [setupEmbed], components: [row] });
+        } else {
+            setTimeout(() => autoSetup(guild), 5 * 60 * 1000);
         }
     } catch (err) {
         console.error(`Could not send setup message in ${guild.name}:`, err);
