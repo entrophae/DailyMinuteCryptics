@@ -8,7 +8,7 @@ import reloadClue from './commands/utility/reloadClue.js';
 import { syncCommand } from './deploy-commands.js';
 import { initializeServer, deleteServerSettings, createTables } from './database.js';
 import { loopServers } from './handlers/clue/puzzleSync.js';
-import { handleSolverButtons, handleAnswerSubmit } from './handlers/clue/solveSession.js';
+import { handleSolverButtons, handleAnswerSubmit } from './handlers/clue/solveHandler.js';
 import { autoSetup, handleAutoSetup } from './handlers/autoSetup.js';
 
 const client = new Client({
