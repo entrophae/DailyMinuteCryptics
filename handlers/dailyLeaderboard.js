@@ -30,7 +30,7 @@ The day is over! Here is how the server performed on yesterday's clue:
 
 ${endLinkings}
 `)
-            .setFooter({ text: `Page ${page + 1} of ${totalPages} | Daily Minute Cryptics` });
+            .setFooter({ text: `Page 1 of 1 | Daily Minute Cryptics` });
     }
 
     const itemsPerPage = 10;

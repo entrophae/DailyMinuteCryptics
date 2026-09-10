@@ -169,7 +169,7 @@ export async function updateLiveStats(client, serverId) {
         const puzzleData = await getServerPuzzle(serverId);
         if (!puzzleData) return;
 
-        const newFooterText = await generateStatsFooterText(puzzleData, serverId, true);
+        const newFooterText = await generateStatsFooterText(puzzleData, serverId);
         const oldEmbed = message.embeds[0];
 
         if (oldEmbed) {
