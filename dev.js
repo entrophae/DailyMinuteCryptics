@@ -1,4 +1,4 @@
-import { EmbedBuilder, MessageFlags } from 'discord.js';
+import { Client, EmbedBuilder, MessageFlags } from 'discord.js';
 import https from 'https';
 
 const HEALTHCHECK_URL = process.env.HEALTHCHECK_URL;
@@ -49,9 +49,7 @@ export async function devLog(client, error, context, serverName = "System") {
 /**
  * Sends a heartbeat to the Healthcheck URL.
  * @param {Client} client - The Discord client instance
- * @param {Error|string} minutes - The frequency to ping
- * @param {string} context - Where the error happened (e.g., "Heartbeat", "Command: /play")
- * @param {string} serverName - The name of the server (if applicable)
+ * @param {number} minutes - The frequency to ping
  */
 export async function startHeartbeat(client, minutes){
     if (HEALTHCHECK_URL) {

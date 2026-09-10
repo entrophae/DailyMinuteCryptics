@@ -73,7 +73,7 @@ export async function checkForNewClue(client, serverId) {
 
     try {
         const puzzleData = await getPuzzleRequestData(serverId);
-        if (!puzzleData) return false;
+        if (!puzzleData) return {isNew: false, newPuzzleData: null, oldPuzzleData: savedPuzzleData};;
 
         const parData = await getParRequestData(serverId);
         if (parData) {
@@ -88,6 +88,6 @@ export async function checkForNewClue(client, serverId) {
         return {isNew: true, newPuzzleData: puzzleData, oldPuzzleData: savedPuzzleData};
     } catch (e) {
         devLog(client, e, "Fetching new Clue");
-        return false;
+        return {isNew: false, newPuzzleData: null, oldPuzzleData: savedPuzzleData};;
     }
 }

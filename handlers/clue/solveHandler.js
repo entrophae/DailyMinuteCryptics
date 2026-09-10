@@ -1,5 +1,5 @@
-import { MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { getPuzzleByUuid, getOrAddUser, getUserPuzzleReveals, startUserPuzzle, updateUserHintReveals, getPuzzleReveals, updateUserPuzzleReveals, finishUserPuzzle, getServerTimezone, updateUserAfterSolve } from "../../database.js";
+import { ActionRowBuilder, EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { getPuzzleByUuid, getOrAddUser, getUserPuzzleReveals, startUserPuzzle, updateUserHintReveals, getPuzzleReveals, updateUserPuzzleReveals, finishUserPuzzle, getServerTimezone, updateUserAfterSolve, getUserSolve } from "../../database.js";
 import { devLog } from "../../dev.js";
 import { createMessage } from "./clueRenderer.js";
 import { sendToServers } from "./solveRenderer.js";
@@ -13,10 +13,6 @@ export async function handleSolverButtons(client, interaction) {
     const puzzleUuid = parts[2];
 
     if (buttonCommand === 'submit-answer') {
-        const modal = new ModalBuilder()
-            .setCustomId(`daily-minute-cryptics_submit-modal_${puzzleUuid}`)
-            .setTitle('Submit Your Answer');
-
         const answerInput = new TextInputBuilder()
             .setCustomId('answer_input')
             .setLabel("What is the answer?")
@@ -24,7 +20,11 @@ export async function handleSolverButtons(client, interaction) {
             .setRequired(true);
 
         const actionRow = new ActionRowBuilder().addComponents(answerInput);
-        modal.addComponents(actionRow);
+
+        const modal = new ModalBuilder()
+            .setCustomId(`daily-minute-cryptics_submit-modal_${puzzleUuid}`)
+            .setTitle('Submit Your Answer')
+            .addComponents(actionRow);
 
         return await interaction.showModal(modal);
     }
